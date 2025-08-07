@@ -54,50 +54,50 @@ export default function Home() {
     }
   }
 
-  async function updatePrice(batteryId, currentPrice) {
-    const newPrice = prompt(`Enter new price for this battery:`, currentPrice || '')
+  // async function updatePrice(batteryId, currentPrice) {
+  //   const newPrice = prompt(`Enter new price for this battery:`, currentPrice || '')
     
-    if (!newPrice || newPrice === currentPrice?.toString()) {
-      return // User cancelled or entered same price
-    }
+  //   if (!newPrice || newPrice === currentPrice?.toString()) {
+  //     return // User cancelled or entered same price
+  //   }
 
-    const priceFloat = parseFloat(newPrice)
-    if (isNaN(priceFloat) || priceFloat < 0) {
-      alert('Please enter a valid positive number')
-      return
-    }
+  //   const priceFloat = parseFloat(newPrice)
+  //   if (isNaN(priceFloat) || priceFloat < 0) {
+  //     alert('Please enter a valid positive number')
+  //     return
+  //   }
 
-    setUpdating(prev => ({ ...prev, [batteryId]: true }))
+  //   setUpdating(prev => ({ ...prev, [batteryId]: true }))
 
-    try {
-      const response = await fetch('/api/update-price', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          batteryId,
-          newPrice: priceFloat
-        })
-      })
+  //   try {
+  //     const response = await fetch('/api/update-price', {
+  //       method: 'POST',
+  //       headers: {
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({
+  //         batteryId,
+  //         newPrice: priceFloat
+  //       })
+  //     })
 
-      const result = await response.json()
+  //     const result = await response.json()
 
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to update price')
-      }
+  //     if (!response.ok) {
+  //       throw new Error(result.error || 'Failed to update price')
+  //     }
 
-      // Refresh data to show updated price
-      await fetchData()
+  //     // Refresh data to show updated price
+  //     await fetchData()
       
-      alert(`Price updated successfully to $${priceFloat}`)
+  //     alert(`Price updated successfully to $${priceFloat}`)
 
-    } catch (error) {
-      alert(`Failed to update price: ${error.message}`)
-    } finally {
-      setUpdating(prev => ({ ...prev, [batteryId]: false }))
-    }
-  }
+  //   } catch (error) {
+  //     alert(`Failed to update price: ${error.message}`)
+  //   } finally {
+  //     setUpdating(prev => ({ ...prev, [batteryId]: false }))
+  //   }
+  // }
 
   async function showBatteryHistory(battery) {
     setSelectedBattery(battery)
@@ -191,7 +191,7 @@ export default function Home() {
                   </td>
                   <td style={{padding: '0.5rem', border: '1px solid #ddd', textAlign: 'center'}}>
                     <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'center'}}>
-                      <button
+                      {/* <button
                         onClick={() => updatePrice(battery.id, battery.current_price)}
                         disabled={updating[battery.id]}
                         style={{
@@ -205,7 +205,7 @@ export default function Home() {
                         }}
                       >
                         {updating[battery.id] ? 'Updating...' : 'Update Price'}
-                      </button>
+                      </button> */}
                       <button
                         onClick={() => showBatteryHistory(battery)}
                         style={{
@@ -229,12 +229,12 @@ export default function Home() {
         </div>
       </div>
       
-      <div style={{marginTop: '2rem', padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '4px'}}>
+      {/* <div style={{marginTop: '2rem', padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '4px'}}>
         <p style={{margin: 0, fontSize: '0.875rem', color: '#666'}}>
           💡 Click "Update Price" to manually enter new prices or "View History" to see price trends over time.
           Each update is saved to the database and price history.
         </p>
-      </div>
+      </div> */}
 
       {/* Price History Modal */}
       {showPriceHistory && (
