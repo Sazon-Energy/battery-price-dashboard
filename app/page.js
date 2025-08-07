@@ -7,7 +7,6 @@ export default function Home() {
   const [batteries, setBatteries] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [updating, setUpdating] = useState({})
   
   // Price history modal state
   const [showPriceHistory, setShowPriceHistory] = useState(false)
@@ -54,66 +53,21 @@ export default function Home() {
     }
   }
 
-  // async function updatePrice(batteryId, currentPrice) {
-  //   const newPrice = prompt(`Enter new price for this battery:`, currentPrice || '')
-    
-  //   if (!newPrice || newPrice === currentPrice?.toString()) {
-  //     return // User cancelled or entered same price
-  //   }
-
-  //   const priceFloat = parseFloat(newPrice)
-  //   if (isNaN(priceFloat) || priceFloat < 0) {
-  //     alert('Please enter a valid positive number')
-  //     return
-  //   }
-
-  //   setUpdating(prev => ({ ...prev, [batteryId]: true }))
-
-  //   try {
-  //     const response = await fetch('/api/update-price', {
-  //       method: 'POST',
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //       },
-  //       body: JSON.stringify({
-  //         batteryId,
-  //         newPrice: priceFloat
-  //       })
-  //     })
-
-  //     const result = await response.json()
-
-  //     if (!response.ok) {
-  //       throw new Error(result.error || 'Failed to update price')
-  //     }
-
-  //     // Refresh data to show updated price
-  //     await fetchData()
-      
-  //     alert(`Price updated successfully to $${priceFloat}`)
-
-  //   } catch (error) {
-  //     alert(`Failed to update price: ${error.message}`)
-  //   } finally {
-  //     setUpdating(prev => ({ ...prev, [batteryId]: false }))
-  //   }
-  // }
-
   async function showBatteryHistory(battery) {
     setSelectedBattery(battery)
     setShowPriceHistory(true)
     setLoadingHistory(true)
     
     try {
-      const { data: history, error } = await supabase
-        .from('price_history')
-        .select('price, scraped_at')
-        .eq('battery_id', battery.id)
-        .order('scraped_at', { ascending: false })
-        .limit(50) // Show last 50 price updates
+      // Use secure API route instead of direct Supabase call
+      const response = await fetch(`/api/price-history?batteryId=${battery.id}`)
+      const result = await response.json()
       
-      if (error) throw error
-      setPriceHistory(history || [])
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to fetch price history')
+      }
+      
+      setPriceHistory(result.history || [])
     } catch (error) {
       console.error('Error fetching price history:', error)
       setPriceHistory([])
@@ -190,37 +144,20 @@ export default function Home() {
                     {battery.battery_classes?.short_name || 'No class'}
                   </td>
                   <td style={{padding: '0.5rem', border: '1px solid #ddd', textAlign: 'center'}}>
-                    <div style={{display: 'flex', gap: '0.5rem', justifyContent: 'center'}}>
-                      {/* <button
-                        onClick={() => updatePrice(battery.id, battery.current_price)}
-                        disabled={updating[battery.id]}
-                        style={{
-                          padding: '0.25rem 0.5rem',
-                          fontSize: '0.875rem',
-                          backgroundColor: updating[battery.id] ? '#ccc' : '#007bff',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: updating[battery.id] ? 'not-allowed' : 'pointer'
-                        }}
-                      >
-                        {updating[battery.id] ? 'Updating...' : 'Update Price'}
-                      </button> */}
-                      <button
-                        onClick={() => showBatteryHistory(battery)}
-                        style={{
-                          padding: '0.25rem 0.5rem',
-                          fontSize: '0.875rem',
-                          backgroundColor: '#28a745',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        View History
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => showBatteryHistory(battery)}
+                      style={{
+                        padding: '0.25rem 0.5rem',
+                        fontSize: '0.875rem',
+                        backgroundColor: '#28a745',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      View History
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -228,13 +165,6 @@ export default function Home() {
           </table>
         </div>
       </div>
-      
-      {/* <div style={{marginTop: '2rem', padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '4px'}}>
-        <p style={{margin: 0, fontSize: '0.875rem', color: '#666'}}>
-          💡 Click "Update Price" to manually enter new prices or "View History" to see price trends over time.
-          Each update is saved to the database and price history.
-        </p>
-      </div> */}
 
       {/* Price History Modal */}
       {showPriceHistory && (
