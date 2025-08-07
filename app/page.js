@@ -144,7 +144,7 @@ export default function Home() {
             <tbody>
               {batteries.map((battery) => (
                 <tr key={battery.id}>
-                  <td style={{padding: '0.5rem', border: '1px solid #ddd'}}>{battery.name}</td>
+                  <td style={{padding: '0.5rem', border: '1px solid #ddd'}}><a href={battery.target_url} target="_blank">{battery.name}</a></td>
                   <td style={{padding: '0.5rem', border: '1px solid #ddd'}}>{battery.supplier}</td>
                   <td style={{padding: '0.5rem', border: '1px solid #ddd', textAlign: 'right', fontWeight: 'bold'}}>
                     {battery.current_price ? `$${battery.current_price}` : 'No price'}
