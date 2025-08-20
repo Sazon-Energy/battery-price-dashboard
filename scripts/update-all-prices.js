@@ -1,14 +1,10 @@
-const scrapeGrowattPrice = require('./scrape-growatt.js');
-const scrapeEcoFlowPrice = require('./scrape-ecoflow.js');
-const scrapeAnkerPrice = require('./scrape-anker.js');
+import dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
 
-const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '.env.local' });
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+import { supabaseAdmin } from './supabase-admin.js'
+import scrapeGrowattPrice from './scrape-growatt.js';
+import scrapeEcoFlowPrice from './scrape-ecoflow.js';
+import scrapeAnkerPrice from './scrape-anker.js';
 
 async function updateBatteryPrice(batteryNamePattern, scrapeFunction, supplierName) {
   console.log(`\n🚀 Starting ${supplierName} price update...`);
@@ -24,7 +20,7 @@ async function updateBatteryPrice(batteryNamePattern, scrapeFunction, supplierNa
   console.log(`💰 ${supplierName} scraped price: $${scrapeResult.price}`);
   
   // Step 2: Find the battery in database
-  const { data: batteries, error: findError } = await supabase
+  const { data: batteries, error: findError } = await supabaseAdmin
     .from('batteries')
     .select('id, name, current_price')
     .ilike('name', batteryNamePattern)
@@ -41,10 +37,10 @@ async function updateBatteryPrice(batteryNamePattern, scrapeFunction, supplierNa
   }
   
   const battery = batteries[0];
-  console.log(`📋 Found battery: ${battery.name} (current: $${battery.current_price || 'none'})`);
+  console.log(`🔋 Found battery: ${battery.name} (current: $${battery.current_price || 'none'})`);
   
   // Step 3: Update the price
-  const { data: updatedBattery, error: updateError } = await supabase
+  const { data: updatedBattery, error: updateError } = await supabaseAdmin
     .from('batteries')
     .update({ 
       current_price: scrapeResult.price,
@@ -60,7 +56,7 @@ async function updateBatteryPrice(batteryNamePattern, scrapeFunction, supplierNa
   }
 
   // Step 4: Add to price history
-  const { error: historyError } = await supabase
+  const { error: historyError } = await supabaseAdmin
     .from('price_history')
     .insert([{
       battery_id: battery.id,
@@ -120,12 +116,12 @@ async function updateAllPrices() {
   };
 }
 
-// Run if called directly
-if (require.main === module) {
+// Check if this file is being run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
   updateAllPrices().then(summary => {
     console.log('\n✨ Batch update completed!');
     process.exit(0);
   });
 }
 
-module.exports = updateAllPrices;
+export default updateAllPrices;

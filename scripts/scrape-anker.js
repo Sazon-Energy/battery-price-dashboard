@@ -1,4 +1,4 @@
-const axios = require('axios');
+import axios from 'axios';
 
 async function scrapeAnkerPrice() {
   try {
@@ -96,11 +96,12 @@ async function scrapeAnkerPrice() {
   }
 }
 
-if (require.main === module) {
+// Check if this file is being run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
   scrapeAnkerPrice().then(result => {
     console.log('\n📊 Anker result:', result);
     process.exit(0);
   });
 }
 
-module.exports = scrapeAnkerPrice;
+export default scrapeAnkerPrice;

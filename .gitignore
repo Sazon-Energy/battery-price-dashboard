@@ -15,3 +15,6 @@ out/
 
 # OS generated files
 .DS_Store
+
+#project summary
+project_summary.txt

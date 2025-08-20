@@ -1,5 +1,5 @@
-const axios = require('axios');
-const cheerio = require('cheerio');
+import axios from 'axios';
+import * as cheerio from 'cheerio';
 
 async function scrapeEcoFlowPrice() {
   try {
@@ -94,11 +94,12 @@ async function scrapeEcoFlowPrice() {
   }
 }
 
-if (require.main === module) {
+// Check if this file is being run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
   scrapeEcoFlowPrice().then(result => {
     console.log('\n📊 EcoFlow result:', result);
     process.exit(0);
   });
 }
 
-module.exports = scrapeEcoFlowPrice;
+export default scrapeEcoFlowPrice;
