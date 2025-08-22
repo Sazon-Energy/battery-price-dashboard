@@ -1,5 +1,10 @@
 import dotenv from 'dotenv'
-dotenv.config({ path: '.env.local' })
+
+
+if (!process.env.GITHUB_ACTIONS) {
+  dotenv.config({ path: '.env.local' })
+}
+//dotenv.config({ path: '.env.local' })
 
 import { createClient } from '@supabase/supabase-js'
 
