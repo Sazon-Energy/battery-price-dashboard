@@ -2,42 +2,25 @@ import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 
 import { supabaseAdmin } from './supabase-admin.js'
-import scrapeGrowattPrice from './scrape-growatt.js';
-import scrapeEcoFlowPrice from './scrape-ecoflow.js';
-import scrapeAnkerPrice from './scrape-anker.js';
+import scrapePrice from './scrape-battery.js'
 
-async function updateBatteryPrice(batteryNamePattern, scrapeFunction, supplierName) {
-  console.log(`\n🚀 Starting ${supplierName} price update...`);
+async function updateBatteryPrice(battery) {
+  const { id: batteryId, name: batteryName } = battery;
+  console.log(`\n🚀 Starting price update for ${batteryName}...`);
   
-  // Step 1: Scrape the price
-  const scrapeResult = await scrapeFunction();
+  // Step 1: Scrape the price using the generic scraper
+  const scrapeResult = await scrapePrice(batteryId);
   
   if (!scrapeResult.success) {
-    console.log(`❌ ${supplierName} scraping failed:`, scrapeResult.error);
-    return { success: false, supplier: supplierName, error: scrapeResult.error };
+    console.log(`❌ ${batteryName} scraping failed:`, scrapeResult.error);
+    return { success: false, batteryId, batteryName, error: scrapeResult.error };
   }
   
-  console.log(`💰 ${supplierName} scraped price: $${scrapeResult.price}`);
+  console.log(`💰 ${batteryName} scraped price: $${scrapeResult.price}`);
   
-  // Step 2: Find the battery in database
-  const { data: batteries, error: findError } = await supabaseAdmin
-    .from('batteries')
-    .select('id, name, current_price')
-    .ilike('name', batteryNamePattern)
-    .limit(1);
-    
-  if (findError) {
-    console.error(`❌ ${supplierName} database query failed:`, findError);
-    return { success: false, supplier: supplierName, error: findError.message };
-  }
-  
-  if (!batteries || batteries.length === 0) {
-    console.log(`❌ ${supplierName} battery not found in database (pattern: ${batteryNamePattern})`);
-    return { success: false, supplier: supplierName, error: 'Battery not found in database' };
-  }
-  
-  const battery = batteries[0];
-  console.log(`🔋 Found battery: ${battery.name} (current: $${battery.current_price || 'none'})`);
+  // Step 2: Get current price for comparison
+  const currentPrice = battery.current_price;
+  console.log(`📋 Current price in database: $${currentPrice || 'none'}`);
   
   // Step 3: Update the price
   const { data: updatedBattery, error: updateError } = await supabaseAdmin
@@ -46,50 +29,84 @@ async function updateBatteryPrice(batteryNamePattern, scrapeFunction, supplierNa
       current_price: scrapeResult.price,
       updated_at: new Date().toISOString()
     })
-    .eq('id', battery.id)
+    .eq('id', batteryId)
     .select()
     .single();
 
   if (updateError) {
-    console.error(`❌ ${supplierName} price update failed:`, updateError);
-    return { success: false, supplier: supplierName, error: updateError.message };
+    console.error(`❌ ${batteryName} price update failed:`, updateError);
+    return { success: false, batteryId, batteryName, error: updateError.message };
   }
 
   // Step 4: Add to price history
   const { error: historyError } = await supabaseAdmin
     .from('price_history')
     .insert([{
-      battery_id: battery.id,
+      battery_id: batteryId,
       price: scrapeResult.price,
       scraped_at: scrapeResult.scrapedAt
     }]);
 
   if (historyError) {
-    console.warn(`⚠️ ${supplierName} price history update failed:`, historyError);
+    console.warn(`⚠️ ${batteryName} price history update failed:`, historyError);
   }
 
-  const priceChange = battery.current_price ? (scrapeResult.price - battery.current_price) : null;
-  console.log(`✅ ${supplierName}: Updated ${battery.name} to $${scrapeResult.price}${priceChange ? ` (${priceChange >= 0 ? '+' : ''}${priceChange.toFixed(2)})` : ''}`);
+  const priceChange = currentPrice ? (scrapeResult.price - currentPrice) : null;
+  console.log(`✅ ${batteryName}: Updated to $${scrapeResult.price}${priceChange ? ` (${priceChange >= 0 ? '+' : ''}$${priceChange.toFixed(2)})` : ''}`);
   
   return {
     success: true,
-    supplier: supplierName,
+    batteryId,
+    batteryName,
     battery: updatedBattery,
-    oldPrice: battery.current_price,
+    oldPrice: currentPrice,
     newPrice: scrapeResult.price,
     priceChange: priceChange
   };
 }
 
 async function updateAllPrices() {
-  console.log('🔄 Starting batch price update for all suppliers...\n');
+  console.log('🔄 Starting batch price update for all batteries...\n');
+  
+  // Fetch all batteries from the database
+  console.log('📥 Fetching all batteries from database...');
+  const { data: batteries, error: fetchError } = await supabaseAdmin
+    .from('batteries')
+    .select('id, name, current_price, target_url')
+    .order('name');
+  
+  if (fetchError) {
+    console.error('❌ Failed to fetch batteries from database:', fetchError);
+    return {
+      total: 0,
+      successful: 0,
+      failed: 0,
+      error: fetchError.message
+    };
+  }
+  
+  if (!batteries || batteries.length === 0) {
+    console.log('⚠️ No batteries found in database');
+    return {
+      total: 0,
+      successful: 0,
+      failed: 0,
+      results: []
+    };
+  }
+  
+  console.log(`📋 Found ${batteries.length} batteries to update\n`);
   
   const results = [];
   
-  // Update each supplier
-  results.push(await updateBatteryPrice('%infinity%2000%pro%', scrapeGrowattPrice, 'Growatt'));
-  results.push(await updateBatteryPrice('%delta%3%', scrapeEcoFlowPrice, 'EcoFlow'));
-  results.push(await updateBatteryPrice('%solix%f2000%', scrapeAnkerPrice, 'Anker'));
+  // Update each battery
+  for (const battery of batteries) {
+    const result = await updateBatteryPrice(battery);
+    results.push(result);
+    
+    // Add a small delay between requests to be respectful to servers
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
   
   // Summary
   console.log('\n📊 BATCH UPDATE SUMMARY:');
@@ -98,15 +115,24 @@ async function updateAllPrices() {
   const successful = results.filter(r => r.success);
   const failed = results.filter(r => !r.success);
   
-  successful.forEach(result => {
-    console.log(`✅ ${result.supplier}: $${result.newPrice} ${result.priceChange ? `(${result.priceChange >= 0 ? '+' : ''}$${result.priceChange.toFixed(2)})` : ''}`);
-  });
+  if (successful.length > 0) {
+    console.log('\n✅ Successful updates:');
+    successful.forEach(result => {
+      const change = result.priceChange 
+        ? ` (${result.priceChange >= 0 ? '+' : ''}$${result.priceChange.toFixed(2)})` 
+        : '';
+      console.log(`  • ${result.batteryName}: $${result.newPrice}${change}`);
+    });
+  }
   
-  failed.forEach(result => {
-    console.log(`❌ ${result.supplier}: ${result.error}`);
-  });
+  if (failed.length > 0) {
+    console.log('\n❌ Failed updates:');
+    failed.forEach(result => {
+      console.log(`  • ${result.batteryName}: ${result.error}`);
+    });
+  }
   
-  console.log(`\n🎯 Success: ${successful.length}/${results.length} suppliers updated`);
+  console.log(`\n🎯 Success: ${successful.length}/${results.length} batteries updated`);
   
   return {
     total: results.length,
@@ -120,7 +146,10 @@ async function updateAllPrices() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   updateAllPrices().then(summary => {
     console.log('\n✨ Batch update completed!');
-    process.exit(0);
+    process.exit(summary.failed > 0 ? 1 : 0);
+  }).catch(error => {
+    console.error('\n❌ Batch update failed:', error);
+    process.exit(1);
   });
 }
 
