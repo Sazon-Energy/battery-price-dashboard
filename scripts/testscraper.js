@@ -20,14 +20,17 @@ if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_A
 }
 
 // Now import the scraper (after env vars are loaded)
+console.log('⏳ Loading scraper module and dependencies...');
+const importStart = Date.now();
 const { default: scrapePrice } = await import('./scrape-battery.js');
+console.log(`✅ Module loaded in ${Date.now() - importStart}ms\n`);
 
 // Get battery ID from command line (as string for UUID support)
 const batteryId = process.argv[2];
 
 if (!batteryId) {
-  console.error('\n❌ Usage: node test-scraper.js <batteryId>');
-  console.error('   Example: node test-scraper.js 550e8400-e29b-41d4-a716-446655440000');
+  console.error('\n❌ Usage: node testscraper.js <batteryId>');
+  console.error('   Example: node testscraper.js 550e8400-e29b-41d4-a716-446655440000');
   process.exit(1);
 }
 

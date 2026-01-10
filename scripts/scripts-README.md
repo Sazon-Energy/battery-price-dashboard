@@ -13,12 +13,12 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 
 ### Run the scraper test
 ```bash
-node scripts/test-scraper.js <batteryId>
+node scripts/testscraper.js <batteryId>
 ```
 
 Example:
 ```bash
-node scripts/test-scraper.js 1
+node scripts/testscraper.js 1
 ```
 
 This will:
