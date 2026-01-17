@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Battery Discovery Configuration",
+  "description": "Configuration for automated battery product discovery system",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Master switch for discovery system. Set to false to disable all discovery runs."
+    },
+    "maxCandidatesPerRun": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum number of new candidates to create per discovery run. Prevents overwhelming user with too many products to review."
+    },
+    "manufacturersPerRun": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of manufacturers to check per run. Set to 1 to rotate through manufacturers on each run."
+    },
+    "maxPagesPerManufacturer": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Maximum product listing pages to crawl per manufacturer. Prevents excessive crawling on large catalogs."
+    },
+    "minPrice": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Minimum price filter (USD). Null = no minimum. Candidates below this price will be skipped."
+    },
+    "maxPrice": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "description": "Maximum price filter (USD). Null = no maximum. Candidates above this price will be skipped."
+    },
+    "requiredKeywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Global keywords required on ALL products (case-insensitive). Usually empty - let manufacturers define their own. Checked against entire page content."
+    },
+    "excludeKeywords": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Global exclude keywords applied to ALL manufacturers (case-insensitive). Usually empty - let manufacturers define their own. Checked against product title and description only."
+    },
+    "autoApproveThreshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Confidence score (0-100) required for auto-approval. 50 = must have name + capacity/power. Set higher for stricter approval, lower for more automation."
+    },
+    "crawlDelayMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "description": "Delay between HTTP requests in milliseconds. Minimum 1000ms (1 second) for polite crawling. 2000ms recommended."
+    },
+    "userAgent": {
+      "type": "string",
+      "description": "User-Agent string sent with HTTP requests. Should identify your crawler and provide contact info."
+    }
+  },
+  "required": [
+    "enabled",
+    "maxCandidatesPerRun",
+    "manufacturersPerRun",
+    "maxPagesPerManufacturer",
+    "autoApproveThreshold",
+    "crawlDelayMs",
+    "userAgent"
+  ],
+  "additionalProperties": false
+}

@@ -5,14 +5,15 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "discover": "node scripts/discover-batteries.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.53.0",
     "axios": "^1.11.0",
     "cheerio": "^1.1.2",
     "dotenv": "^17.2.1",
-    "next": "15.4.10",
+    "next": "^15.4.5",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   }

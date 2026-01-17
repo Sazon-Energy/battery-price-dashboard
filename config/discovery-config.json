@@ -1,0 +1,14 @@
+{
+  "$schema": "./discovery-config.schema.json",
+  "enabled": true,
+  "maxCandidatesPerRun": 5,
+  "manufacturersPerRun": 1,
+  "maxPagesPerManufacturer": 10,
+  "minPrice": null,
+  "maxPrice": null,
+  "requiredKeywords": [],
+  "excludeKeywords": [],
+  "autoApproveThreshold": 50,
+  "crawlDelayMs": 2000,
+  "userAgent": "Mozilla/5.0 (compatible; BatteryPriceMonitor/1.0; +https://github.com/yourusername/battery-dashboard)"
+}
