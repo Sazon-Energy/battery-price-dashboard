@@ -1,0 +1,59 @@
+name: Discover Battery Candidates
+
+on:
+  schedule:
+    # Run every Monday at 7:00 AM UTC
+    - cron: '0 7 * * 1'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  discover-batteries:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Discover new battery candidates
+      id: discover
+      env:
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      run: node scripts/discover-batteries.js
+
+    - name: Log completion on success
+      if: success()
+      run: |
+        echo "✅ Battery discovery completed successfully at $(date)"
+        echo ""
+        echo "Next steps:"
+        echo "  1. Log into Supabase dashboard"
+        echo "  2. Navigate to battery_candidates table"
+        echo "  3. Review and approve new candidates"
+
+    - name: Log failure details
+      if: failure()
+      run: |
+        echo "❌ BATTERY DISCOVERY FAILED at $(date)"
+        echo "============================================"
+        echo "This failure indicates one of the following issues:"
+        echo "  1. Database connection problems (Supabase)"
+        echo "  2. Manufacturer website structure changes"
+        echo "  3. Network connectivity issues"
+        echo "  4. Invalid environment variables/secrets"
+        echo "  5. Configuration file (config/discovery-config.json) issues"
+        echo ""
+        echo "Action required: Check the logs above for specific error details"
+        echo "Repository: ${{ github.repository }}"
+        echo "Workflow: ${{ github.workflow }}"
+        echo "Run ID: ${{ github.run_id }}"
+        exit 1
