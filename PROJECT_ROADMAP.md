@@ -9,9 +9,17 @@
 - GitHub Actions automation for twice-weekly price updates
 - Price history tracking and display
 
-### 🚧 In Progress (Phase 2) - Automated Battery Discovery
+### ✅ Completed (Phase 2) - Automated Battery Discovery
+- Database infrastructure (manufacturers, battery_candidates tables)
+- Discovery service (`scripts/discover-batteries.js`)
+- Web UI for candidate review (`/candidates` page)
+- Batch SQL operations for approval workflow
+- GitHub Actions automation (weekly discovery runs)
+- Manual trigger option via GitHub Actions UI
 
-Adding agentic battery discovery system to automatically find new batteries on manufacturer websites.
+### 🚧 In Progress (Phase 2.7) - Testing & Refinement
+
+Tuning and improving the discovery system based on production usage.
 
 ---
 
@@ -85,47 +93,50 @@ Automatically discover new consumer battery products from manufacturer websites,
 - [x] Create proof-of-concept crawler
 - [x] Test on Anker & EcoFlow
 - [x] Validate content-based filtering approach
-- [ ] Refine with enhanced logging and capacity handling
+- [x] Refine with enhanced logging and capacity handling
 
-#### Phase 2.2: Database Infrastructure
-- [ ] Create manufacturers table with seed data (Anker, EcoFlow, Jackery, Bluetti, Goal Zero)
-- [ ] Create battery_candidates table
-- [ ] Create discovery_config table
-- [ ] Update batteries table (add candidate_id, discovered_by columns)
+#### Phase 2.2: Database Infrastructure ✅
+- [x] Create manufacturers table with seed data (Anker, EcoFlow, Jackery, Bluetti, Goal Zero)
+- [x] Create battery_candidates table
+- [x] Create file-based discovery_config (config/discovery-config.json)
+- [x] Update batteries table (add candidate_id, discovered_by columns)
+- [x] Simplified schema (removed unnecessary cross-references)
 
-#### Phase 2.3: Discovery Service
-- [ ] Build discovery script (`scripts/discover-batteries.js`)
-- [ ] Extract to utility modules:
+#### Phase 2.3: Discovery Service ✅
+- [x] Build discovery script (`scripts/discover-batteries.js`)
+- [x] Extract to utility modules:
   - `lib/battery-crawler.js` - URL discovery, content filtering
   - `lib/spec-extractor.js` - Capacity/power extraction
   - `lib/battery-classifier.js` - Match to battery classes
-- [ ] Implement deduplication (normalized URLs)
-- [ ] Add error monitoring and alerts
+- [x] Implement deduplication (normalized URLs)
+- [x] Add error monitoring and alerts
 
-#### Phase 2.4: API Endpoints
-- [ ] `/api/candidates` - List/filter/paginate candidates
-- [ ] `/api/candidates` - Approve/reject candidates
-- [ ] `/api/manufacturers` - CRUD for manufacturers
-- [ ] `/api/discovery-config` - Get/update configuration
+#### Phase 2.4: API Endpoints ✅
+- [x] `/api/candidates` - List/filter/paginate candidates
+- [x] Batch SQL operations for approve/reject
+- [x] Database queries for manufacturers
+- [x] Configuration loaded from file
 
-#### Phase 2.5: UI for Candidate Management
-- [ ] `/batteries/candidates` page - List view
-- [ ] Filtering (status, date, manufacturer)
-- [ ] Sorting (date, confidence, price)
-- [ ] Pagination (20 per page)
-- [ ] Bulk approve/reject
-- [ ] `/batteries/candidates/[id]` - Detail view
-- [ ] Edit before approval
-- [ ] Rejection reason input
+#### Phase 2.5: UI for Candidate Management ✅
+- [x] `/candidates` page - List view with pending filter
+- [x] Display manufacturer, name, discovery time
+- [x] Clickable links to product pages
+- [x] Automatic timezone localization
+- [x] Batch SQL workflow documented in CANDIDATE_REVIEW_GUIDE.md
 
-#### Phase 2.6: Automation
-- [ ] GitHub Actions workflow for discovery
-- [ ] Weekly schedule (configurable)
-- [ ] Manual trigger option
-- [ ] Notifications for failures (0 products found)
+#### Phase 2.6: Automation ✅
+- [x] GitHub Actions workflow for discovery
+- [x] Weekly schedule (Mondays at 7:00 AM UTC)
+- [x] Manual trigger option
+- [x] Error logging to workflow output
 
-#### Phase 2.7: Testing & Refinement
-- [ ] Test all manufacturers
+#### Phase 2.7: Testing & Refinement 🚧
+- [x] Test Anker (enabled, working)
+- [x] Test EcoFlow (enabled, working)
+- [ ] Fix Jackery name extraction (captures generic name instead of model name)
+- [ ] Fix Bluetti catalog URL (returns 404)
+- [ ] Test Goal Zero
+- [ ] Add status message to candidates page showing last discovery run
 - [ ] Tune confidence scoring
 - [ ] Refine keyword filters
 - [ ] Monitor resource usage
@@ -250,6 +261,9 @@ Automatically discover new consumer battery products from manufacturer websites,
 1. Anker price extraction fails (ankersolix.com pricing needs investigation)
 2. Name extraction duplicates text from multiple h1 tags
 3. Some capacity/power values incorrectly classified
+4. Jackery name extraction captures generic name instead of actual battery model name from rendered page
+5. Bluetti catalog URL returns 404 (https://www.bluettipower.com/collections/portable-power-stations)
+6. Candidates page needs status message showing last discovery run time and manufacturer searched
 
 ### To Address in Phase 2
 - [ ] Fix Anker price extraction (investigate site-specific selectors)
@@ -268,6 +282,26 @@ Automatically discover new consumer battery products from manufacturer websites,
 ---
 
 ## Change Log
+
+**January 21, 2026**
+- Updated roadmap to reflect Phase 2 completion
+- Added current known issues (Jackery, Bluetti, candidates page status)
+- Moved to Phase 2.7 (Testing & Refinement)
+
+**January 18, 2026**
+- Completed Phase 2.6 (Automation with GitHub Actions)
+- Deployed candidate review page to production
+- Created CANDIDATE_REVIEW_GUIDE.md and DEPLOY.md
+
+**January 17, 2026**
+- Completed Phase 2.5 (UI for Candidate Management)
+- Completed Phase 2.4 (Batch SQL operations)
+- Simplified database schema (removed cross-references)
+
+**January 16, 2026**
+- Completed Phase 2.3 (Discovery Service)
+- Completed Phase 2.2 (Database Infrastructure)
+- Created discovery automation script
 
 **January 15, 2026**
 - Created project roadmap
