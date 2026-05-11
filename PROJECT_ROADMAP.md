@@ -157,6 +157,7 @@ Automatically discover new consumer battery products from manufacturer websites,
 - [ ] Price prediction/trends
 - [ ] Historical low/high indicators
 - [ ] Price comparison across retailers
+- [ ] Show pricing and price history with cost per kWh in addition to retail price; improve battery class tracking as needed to support this
 
 ### Data Quality
 - [ ] Automated testing of scraper methods
