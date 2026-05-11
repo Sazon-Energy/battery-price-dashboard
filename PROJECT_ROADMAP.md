@@ -264,6 +264,7 @@ Automatically discover new consumer battery products from manufacturer websites,
 4. Jackery name extraction captures generic name instead of actual battery model name from rendered page
 5. Bluetti catalog URL returns 404 (https://www.bluettipower.com/collections/portable-power-stations)
 6. Candidates page needs status message showing last discovery run time and manufacturer searched
+7. Supabase paused instance error handling - App shows generic "TypeError: Load failed" with no helpful feedback when Supabase instance is paused; no errors visible in Vercel logs; need graceful error handling with clear user feedback
 
 ### To Address in Phase 2
 - [ ] Fix Anker price extraction (investigate site-specific selectors)
