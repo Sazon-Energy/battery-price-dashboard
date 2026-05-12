@@ -8,7 +8,6 @@
   "maxPrice": null,
   "requiredKeywords": [],
   "excludeKeywords": [],
-  "autoApproveThreshold": 50,
   "crawlDelayMs": 2000,
   "userAgent": "Mozilla/5.0 (compatible; BatteryPriceMonitor/1.0; +https://github.com/yourusername/battery-dashboard)"
 }

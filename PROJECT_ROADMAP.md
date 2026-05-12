@@ -133,11 +133,14 @@ Automatically discover new consumer battery products from manufacturer websites,
 #### Phase 2.7: Testing & Refinement 🚧
 - [x] Test Anker (enabled, working)
 - [x] Test EcoFlow (enabled, working)
+- [x] Add status message to candidates page showing last discovery run
+- [x] Add `scrape_verified` flag to gate discovery on sites with proven price scraping
+- [x] Capture `discovered_price` at discovery time (shared price extractor in `lib/price-extractor.js`)
+- [x] Log price extraction failures to `price_extraction_failures` table
+- [x] One-click approve/reject UI with `ADMIN_TOKEN` protection (replaces batch SQL workflow)
 - [ ] Fix Jackery name extraction (captures generic name instead of model name)
 - [ ] Fix Bluetti catalog URL (returns 404)
-- [ ] Test Goal Zero
-- [ ] Add status message to candidates page showing last discovery run
-- [ ] Tune confidence scoring
+- [ ] Test Goal Zero (then flip `scrape_verified=true` if working)
 - [ ] Refine keyword filters
 - [ ] Monitor resource usage
 - [ ] Document manufacturer configuration
