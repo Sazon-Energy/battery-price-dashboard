@@ -47,12 +47,6 @@
       },
       "description": "Global exclude keywords applied to ALL manufacturers (case-insensitive). Usually empty - let manufacturers define their own. Checked against product title and description only."
     },
-    "autoApproveThreshold": {
-      "type": "number",
-      "minimum": 0,
-      "maximum": 100,
-      "description": "Confidence score (0-100) required for auto-approval. 50 = must have name + capacity/power. Set higher for stricter approval, lower for more automation."
-    },
     "crawlDelayMs": {
       "type": "integer",
       "minimum": 1000,
@@ -68,7 +62,6 @@
     "maxCandidatesPerRun",
     "manufacturersPerRun",
     "maxPagesPerManufacturer",
-    "autoApproveThreshold",
     "crawlDelayMs",
     "userAgent"
   ],

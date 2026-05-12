@@ -24,6 +24,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { extractPriceFromHtml } from '../lib/price-extractor.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -278,54 +279,7 @@ function cleanProductName(name) {
 }
 
 /**
- * Match battery to existing class based on capacity
- */
-async function matchBatteryClass(capacityKwh) {
-  if (!capacityKwh) return null;
-
-  // Round capacity to nearest 0.5 kWh
-  const roundedCapacity = Math.round(capacityKwh * 2) / 2;
-
-  // Fetch battery classes from database
-  const { data: batteryClasses, error } = await supabase
-    .from('battery_classes')
-    .select('*');
-
-  if (error || !batteryClasses) {
-    console.log('   ⚠️  Could not fetch battery classes for matching');
-    return null;
-  }
-
-  // Find closest matching class
-  let bestMatch = null;
-  let smallestDiff = Infinity;
-
-  for (const batteryClass of batteryClasses) {
-    const diff = Math.abs(batteryClass.capacity_kwh - roundedCapacity);
-    if (diff < smallestDiff && diff < 0.5) {
-      smallestDiff = diff;
-      bestMatch = batteryClass;
-    }
-  }
-
-  return bestMatch ? bestMatch.id : null;
-}
-
-/**
- * Calculate confidence score for candidate
- */
-function calculateConfidence(name, capacity, power) {
-  let score = 0;
-
-  if (name) score += 25;
-  if (capacity) score += 50;
-  if (power.continuous || power.peak) score += 25;
-
-  return score;
-}
-
-/**
- * Analyze product page and extract battery specs
+ * Analyze product page and extract battery specs + price
  */
 async function analyzeBatteryProduct(url, manufacturer) {
   try {
@@ -401,23 +355,40 @@ async function analyzeBatteryProduct(url, manufacturer) {
       extractedSpecs.peak_power_matched = powerResult.peak.matched;
     }
 
-    // Calculate confidence
-    const confidence = calculateConfidence(name, capacityResult, powerResult);
-
-    // Match to battery class
-    const batteryClassId = capacityResult ? await matchBatteryClass(capacityResult.value) : null;
+    // Extract price using shared extractor (same logic as price scraper)
+    const { price, method } = extractPriceFromHtml(response.data, url);
 
     return {
       skipped: false,
       name,
       extractedSpecs,
-      confidence,
-      batteryClassId
+      discoveredPrice: price,
+      priceMethod: method
     };
 
   } catch (error) {
     console.log(`   ❌ Error analyzing product: ${error.message}`);
     return { skipped: true, reason: 'error', error: error.message };
+  }
+}
+
+/**
+ * Log a price extraction failure for a battery product page
+ */
+async function logPriceFailure(url, normalizedUrl, manufacturer, name, extractedSpecs, reason) {
+  const { error } = await supabase
+    .from('price_extraction_failures')
+    .insert({
+      url,
+      normalized_url: normalizedUrl,
+      manufacturer_id: manufacturer.id,
+      product_name: name,
+      extracted_specs: extractedSpecs || {},
+      failure_reason: reason
+    });
+
+  if (error) {
+    console.log(`   ⚠️  Failed to log price failure: ${error.message}`);
   }
 }
 
@@ -436,11 +407,11 @@ async function urlAlreadyKnown(normalizedUrl) {
     return { exists: true, source: 'candidate' };
   }
 
-  // Check if already in batteries table
+  // Check if already in batteries table (column is target_url)
   const { data: battery, error: batteryError } = await supabase
     .from('batteries')
     .select('id')
-    .eq('url', normalizedUrl)
+    .eq('target_url', normalizedUrl)
     .single();
 
   if (!batteryError && battery !== null) {
@@ -458,11 +429,13 @@ async function discoverBatteries() {
   console.log('║           Battery Discovery - Production Version              ║');
   console.log('╚════════════════════════════════════════════════════════════════╝\n');
 
-  // Fetch enabled manufacturers from database
+  // Fetch manufacturers that are both enabled AND have a verified price scraper.
+  // scrape_verified gates discovery on sites where we know the price extractor works.
   const { data: manufacturers, error: mfgError } = await supabase
     .from('manufacturers')
     .select('*')
     .eq('enabled', true)
+    .eq('scrape_verified', true)
     .order('last_searched_at', { ascending: true, nullsFirst: true })
     .limit(CONFIG.manufacturersPerRun);
 
@@ -472,11 +445,11 @@ async function discoverBatteries() {
   }
 
   if (!manufacturers || manufacturers.length === 0) {
-    console.log('⚠️  No enabled manufacturers found');
+    console.log('⚠️  No enabled+scrape_verified manufacturers found');
     return;
   }
 
-  console.log(`📋 Found ${manufacturers.length} enabled manufacturer(s) to process\n`);
+  console.log(`📋 Found ${manufacturers.length} enabled+verified manufacturer(s) to process\n`);
 
   let totalCandidatesCreated = 0;
 
@@ -533,8 +506,20 @@ async function discoverBatteries() {
 
       if (result.skipped) {
         console.log(`   ⏭️  Skipped: ${result.reason}`);
+      } else if (!result.discoveredPrice) {
+        // Battery product confirmed, but no price found.
+        // Log to price_extraction_failures so the failure is visible and actionable.
+        console.log(`   ⚠️  No price extracted for ${result.name} - logging failure`);
+        await logPriceFailure(
+          url,
+          normalizedUrl,
+          manufacturer,
+          result.name,
+          result.extractedSpecs,
+          'no_price_extracted'
+        );
       } else {
-        // Create candidate (all candidates require manual review)
+        // Create candidate with price (all candidates require manual review)
         const { error: insertError } = await supabase
           .from('battery_candidates')
           .insert({
@@ -543,10 +528,8 @@ async function discoverBatteries() {
             name: result.name,
             manufacturer_id: manufacturer.id,
             extracted_specs: result.extractedSpecs,
-            battery_class_id: result.batteryClassId,
-            confidence_score: result.confidence,
-            status: 'pending',
-            auto_approved: false
+            discovered_price: result.discoveredPrice,
+            status: 'pending'
           });
 
         if (insertError) {
@@ -554,8 +537,7 @@ async function discoverBatteries() {
         } else {
           candidatesCreated++;
           totalCandidatesCreated++;
-          console.log(`   ✅ Created candidate: ${result.name}`);
-          console.log(`      Confidence: ${result.confidence}%`);
+          console.log(`   ✅ Created candidate: ${result.name} ($${result.discoveredPrice} via ${result.priceMethod})`);
         }
       }
 
