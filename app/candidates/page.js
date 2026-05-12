@@ -108,12 +108,10 @@ export default function CandidateReview() {
   }
 
   async function handleReject(candidateId, name) {
-    const reason = window.prompt(`Reject "${name}". Reason (optional):`)
-    if (reason === null) return
     setPendingActionId(candidateId)
     setActionMessage(null)
     try {
-      await callAdminApi('/api/candidates/reject', { candidateId, reason })
+      await callAdminApi('/api/candidates/reject', { candidateId })
       setCandidates(prev => prev.filter(c => c.id !== candidateId))
       setActionMessage({ type: 'success', text: `Rejected: ${name}` })
     } catch (err) {
