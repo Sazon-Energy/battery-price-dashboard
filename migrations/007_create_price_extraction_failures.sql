@@ -19,6 +19,11 @@ CREATE INDEX idx_price_failures_manufacturer ON price_extraction_failures(manufa
 CREATE INDEX idx_price_failures_attempted_at ON price_extraction_failures(attempted_at DESC);
 CREATE INDEX idx_price_failures_normalized_url ON price_extraction_failures(normalized_url);
 
+-- Lock the table down. Only the discovery script (service role) writes to it;
+-- nothing reads it via anon/authenticated keys. Service role bypasses RLS, so
+-- enabling RLS with no policies effectively makes this admin-only.
+ALTER TABLE price_extraction_failures ENABLE ROW LEVEL SECURITY;
+
 COMMENT ON TABLE price_extraction_failures IS
   'Logged when discovery identifies a battery product page but the price scraper cannot extract a price. Used to track which known-battery URLs need scraper improvements.';
 COMMENT ON COLUMN price_extraction_failures.failure_reason IS

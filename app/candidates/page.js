@@ -63,26 +63,28 @@ export default function CandidateReview() {
     }
   }
 
-  async function callAdminApi(path, body) {
-    if (!adminToken) {
+  async function callAdminApi(path, body, tokenOverride = null) {
+    const token = tokenOverride || adminToken
+
+    if (!token) {
       const entered = window.prompt('Enter admin token:')
-      if (!entered) return null
+      if (!entered) throw new Error('Admin token required')
       persistToken(entered)
-      return callAdminApi(path, body)
+      return callAdminApi(path, body, entered)
     }
 
     const response = await fetch(path, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Admin-Token': adminToken
+        'X-Admin-Token': token
       },
       body: JSON.stringify(body)
     })
 
     if (response.status === 401) {
       persistToken('')
-      throw new Error('Unauthorized - token cleared, please try again')
+      throw new Error('Invalid admin token - cleared. Please try again.')
     }
 
     const data = await response.json()
@@ -108,12 +110,10 @@ export default function CandidateReview() {
   }
 
   async function handleReject(candidateId, name) {
-    const reason = window.prompt(`Reject "${name}". Reason (optional):`)
-    if (reason === null) return
     setPendingActionId(candidateId)
     setActionMessage(null)
     try {
-      await callAdminApi('/api/candidates/reject', { candidateId, reason })
+      await callAdminApi('/api/candidates/reject', { candidateId })
       setCandidates(prev => prev.filter(c => c.id !== candidateId))
       setActionMessage({ type: 'success', text: `Rejected: ${name}` })
     } catch (err) {
@@ -180,16 +180,19 @@ export default function CandidateReview() {
               Last discovery run: {formatDateTime(lastDiscoveryRun)}
             </p>
           </div>
-          <div className="text-right text-xs text-gray-500">
+          <div className="text-right text-sm">
             {adminToken ? (
-              <button
-                onClick={() => persistToken('')}
-                className="underline hover:text-gray-700"
-              >
-                Clear admin token
-              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-green-600 font-medium">✓ Admin token set</span>
+                <button
+                  onClick={() => persistToken('')}
+                  className="text-xs text-gray-500 underline hover:text-gray-700"
+                >
+                  Clear
+                </button>
+              </div>
             ) : (
-              <span>No admin token set</span>
+              <span className="text-amber-600 font-medium">⚠ No admin token set</span>
             )}
           </div>
         </div>
