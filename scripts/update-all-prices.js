@@ -144,13 +144,38 @@ async function updateAllPrices() {
 
 // Check if this file is being run directly
 if (import.meta.url === `file://${process.argv[1]}`) {
-  updateAllPrices().then(summary => {
-    console.log('\n✨ Batch update completed!');
-    process.exit(summary.failed > 0 ? 1 : 0);
-  }).catch(error => {
-    console.error('\n❌ Batch update failed:', error);
-    process.exit(1);
-  });
+  const batteryId = process.argv[2];
+
+  if (batteryId) {
+    const { data, error } = await supabaseAdmin
+      .from('batteries')
+      .select('id, name, current_price, target_url')
+      .eq('id', batteryId)
+      .single();
+
+    if (error || !data) {
+      console.error(`❌ Battery ${batteryId} not found:`, error?.message);
+      process.exit(1);
+    }
+
+    updateBatteryPrice(data).then(result => {
+      if (result.success) {
+        console.log('\n✨ Done!');
+        process.exit(0);
+      } else {
+        console.error('\n❌ Failed:', result.error);
+        process.exit(1);
+      }
+    });
+  } else {
+    updateAllPrices().then(summary => {
+      console.log('\n✨ Batch update completed!');
+      process.exit(summary.failed > 0 ? 1 : 0);
+    }).catch(error => {
+      console.error('\n❌ Batch update failed:', error);
+      process.exit(1);
+    });
+  }
 }
 
 export default updateAllPrices;
