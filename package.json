@@ -16,5 +16,10 @@
     "next": "^15.4.5",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.2",
+    "postcss": "^8.5.16",
+    "tailwindcss": "^4.3.2"
   }
 }

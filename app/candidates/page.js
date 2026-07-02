@@ -2,6 +2,12 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 
+const DEFAULT_SORT_COLUMNS = ['manufacturer', 'name', 'discovered_at']
+const SORT_OPTIONS = [
+  { column: 'manufacturer', label: 'Manufacturer' },
+  { column: 'name', label: 'Battery Name' },
+  { column: 'discovered_at', label: 'Discovered' }
+]
 export default function CandidateReview() {
   const [candidates, setCandidates] = useState([])
   const [lastDiscoveryRun, setLastDiscoveryRun] = useState(null)
@@ -9,7 +15,10 @@ export default function CandidateReview() {
   const [error, setError] = useState(null)
   const [adminToken, setAdminToken] = useState('')
   const [pendingActionId, setPendingActionId] = useState(null)
-  const [actionMessage, setActionMessage] = useState(null)
+  const [sortColumn, setSortColumn] = useState(null)
+  const [sortDirection, setSortDirection] = useState('asc')
+  const [previewedCandidateId, setPreviewedCandidateId] = useState(null)
+  const [resolvedCandidates, setResolvedCandidates] = useState({})
 
   useEffect(() => {
     const stored = sessionStorage.getItem('adminToken')
@@ -94,33 +103,89 @@ export default function CandidateReview() {
     return data
   }
 
+  function markCandidateResolved(candidateId, status) {
+    setResolvedCandidates(prev => ({ ...prev, [candidateId]: status }))
+  }
+
+  function handlePreview(candidateId) {
+    setPreviewedCandidateId(candidateId)
+  }
+
   async function handleApprove(candidateId, name) {
     if (!window.confirm(`Approve "${name}" and add to tracked batteries?`)) return
     setPendingActionId(candidateId)
-    setActionMessage(null)
     try {
       await callAdminApi('/api/candidates/approve', { candidateId })
-      setCandidates(prev => prev.filter(c => c.id !== candidateId))
-      setActionMessage({ type: 'success', text: `Approved: ${name}` })
+      markCandidateResolved(candidateId, 'approved')
     } catch (err) {
-      setActionMessage({ type: 'error', text: err.message })
+      window.alert(err.message)
     } finally {
       setPendingActionId(null)
     }
   }
 
-  async function handleReject(candidateId, name) {
+  async function handleReject(candidateId) {
     setPendingActionId(candidateId)
-    setActionMessage(null)
     try {
       await callAdminApi('/api/candidates/reject', { candidateId })
-      setCandidates(prev => prev.filter(c => c.id !== candidateId))
-      setActionMessage({ type: 'success', text: `Rejected: ${name}` })
+      markCandidateResolved(candidateId, 'rejected')
     } catch (err) {
-      setActionMessage({ type: 'error', text: err.message })
+      window.alert(err.message)
     } finally {
       setPendingActionId(null)
     }
+  }
+
+  function getSortValue(candidate, column) {
+    switch (column) {
+      case 'manufacturer':
+        return candidate.manufacturers?.name || ''
+      case 'name':
+        return candidate.name || ''
+      case 'discovered_at':
+        return candidate.discovered_at || ''
+      default:
+        return ''
+    }
+  }
+
+  function compareCandidates(candidateA, candidateB, column, direction) {
+    const valueA = getSortValue(candidateA, column)
+    const valueB = getSortValue(candidateB, column)
+    const comparison = typeof valueA === 'string'
+      ? valueA.localeCompare(valueB)
+      : (valueA < valueB ? -1 : valueA > valueB ? 1 : 0)
+    return direction === 'asc' ? comparison : -comparison
+  }
+
+  function getSortedCandidates() {
+    const sorted = [...candidates]
+    if (sortColumn) {
+      sorted.sort((candidateA, candidateB) => compareCandidates(candidateA, candidateB, sortColumn, sortDirection))
+    } else {
+      sorted.sort((candidateA, candidateB) => {
+        for (const column of DEFAULT_SORT_COLUMNS) {
+          const comparison = compareCandidates(candidateA, candidateB, column, 'asc')
+          if (comparison !== 0) return comparison
+        }
+        return 0
+      })
+    }
+    return sorted
+  }
+
+  function handleSort(column) {
+    if (sortColumn === column) {
+      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortColumn(column)
+      setSortDirection('asc')
+    }
+  }
+
+  function sortIndicator(column) {
+    if (sortColumn !== column) return null
+    return sortDirection === 'asc' ? ' ▲' : ' ▼'
   }
 
   function formatDateTime(timestamp) {
@@ -167,6 +232,8 @@ export default function CandidateReview() {
     )
   }
 
+  const pendingCount = candidates.filter(candidate => !resolvedCandidates[candidate.id]).length
+
   return (
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto">
@@ -174,7 +241,7 @@ export default function CandidateReview() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Candidate Review</h1>
             <p className="mt-2 text-gray-600">
-              {candidates.length} pending {candidates.length === 1 ? 'candidate' : 'candidates'}
+              {pendingCount} pending {pendingCount === 1 ? 'candidate' : 'candidates'}
             </p>
             <p className="mt-1 text-sm text-gray-500">
               Last discovery run: {formatDateTime(lastDiscoveryRun)}
@@ -197,84 +264,118 @@ export default function CandidateReview() {
           </div>
         </div>
 
-        {actionMessage && (
-          <div
-            className={`mb-4 px-4 py-3 rounded border ${
-              actionMessage.type === 'success'
-                ? 'bg-green-50 border-green-200 text-green-700'
-                : 'bg-red-50 border-red-200 text-red-700'
-            }`}
-          >
-            {actionMessage.text}
-          </div>
-        )}
-
         {candidates.length === 0 ? (
           <div className="bg-white shadow rounded-lg p-8 text-center text-gray-500">
             No pending candidates to review
           </div>
         ) : (
-          <div className="bg-white shadow rounded-lg overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Manufacturer</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Battery Name</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Capacity</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Discovered</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {candidates.map((candidate) => {
-                  const isPending = pendingActionId === candidate.id
-                  return (
-                    <tr key={candidate.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+          <>
+            <div className="mb-4 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-gray-500 font-medium">Sort by:</span>
+              {SORT_OPTIONS.map(option => (
+                <button
+                  key={option.column}
+                  onClick={() => handleSort(option.column)}
+                  className={`px-3 py-1 rounded-full border text-xs font-medium transition-colors ${
+                    sortColumn === option.column
+                      ? 'bg-blue-600 border-blue-600 text-white'
+                      : 'bg-white border-gray-300 text-gray-600 hover:border-gray-400'
+                  }`}
+                >
+                  {option.label}{sortIndicator(option.column)}
+                </button>
+              ))}
+              {sortColumn && (
+                <button
+                  onClick={() => { setSortColumn(null); setSortDirection('asc') }}
+                  className="text-xs text-gray-400 underline hover:text-gray-600"
+                >
+                  Reset to default
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {getSortedCandidates().map((candidate) => {
+                const isPending = pendingActionId === candidate.id
+                const isPreviewed = previewedCandidateId === candidate.id
+                const resolvedStatus = resolvedCandidates[candidate.id] || null
+
+                const cardStateClasses = resolvedStatus === 'approved'
+                  ? 'border-green-200 bg-green-50/50 opacity-60 grayscale-[0.3]'
+                  : resolvedStatus === 'rejected'
+                  ? 'border-gray-200 bg-gray-50 opacity-50 grayscale-[0.5]'
+                  : isPreviewed
+                  ? 'border-blue-400 ring-2 ring-blue-300 shadow-md'
+                  : 'border-gray-200 hover:shadow-md'
+
+                return (
+                  <div
+                    key={candidate.id}
+                    className={`flex flex-col gap-3 rounded-xl border bg-white p-4 shadow-sm transition-all duration-500 ease-out ${cardStateClasses}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
                         {candidate.manufacturers?.name || 'Unknown'}
-                      </td>
-                      <td className="px-4 py-4 text-sm">
-                        <a
-                          href={candidate.normalized_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {candidate.name}
-                        </a>
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700 text-right">
-                        {formatCapacity(candidate.extracted_specs)}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm font-semibold text-gray-900 text-right">
-                        {formatPrice(candidate.discovered_price)}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
+                      </span>
+                      <span className="text-[11px] text-gray-400 whitespace-nowrap">
                         {formatDateTime(candidate.discovered_at)}
-                      </td>
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-right space-x-2">
-                        <button
-                          disabled={isPending}
-                          onClick={() => handleApprove(candidate.id, candidate.name)}
-                          className="px-3 py-1 rounded bg-green-600 text-white text-xs font-medium hover:bg-green-700 disabled:opacity-50"
-                        >
-                          Approve
-                        </button>
-                        <button
-                          disabled={isPending}
-                          onClick={() => handleReject(candidate.id, candidate.name)}
-                          className="px-3 py-1 rounded bg-gray-200 text-gray-800 text-xs font-medium hover:bg-gray-300 disabled:opacity-50"
-                        >
-                          Reject
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </span>
+                    </div>
+
+                    <a
+                      href={candidate.normalized_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => handlePreview(candidate.id)}
+                      title={candidate.name}
+                      className="text-[15px] font-semibold leading-snug text-gray-900 line-clamp-2 hover:text-blue-600 transition-colors"
+                    >
+                      {candidate.name}
+                    </a>
+
+                    <div className="flex gap-2">
+                      <button
+                        disabled={isPending || !!resolvedStatus}
+                        onClick={() => handleApprove(candidate.id, candidate.name)}
+                        className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors duration-500 disabled:cursor-default ${
+                          resolvedStatus === 'approved'
+                            ? 'bg-green-600 text-white'
+                            : resolvedStatus === 'rejected'
+                            ? 'bg-gray-100 text-gray-300'
+                            : 'bg-green-600 text-white hover:bg-green-700 disabled:opacity-50'
+                        }`}
+                      >
+                        {resolvedStatus === 'approved' ? '✓ Approved' : 'Approve'}
+                      </button>
+                      <button
+                        disabled={isPending || !!resolvedStatus}
+                        onClick={() => handleReject(candidate.id)}
+                        className={`flex-1 rounded-lg py-2 text-sm font-medium transition-colors duration-500 disabled:cursor-default ${
+                          resolvedStatus === 'rejected'
+                            ? 'bg-gray-600 text-white'
+                            : resolvedStatus === 'approved'
+                            ? 'bg-gray-100 text-gray-300'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50'
+                        }`}
+                      >
+                        {resolvedStatus === 'rejected' ? '✕ Rejected' : 'Reject'}
+                      </button>
+                    </div>
+
+                    <div className="flex items-baseline justify-between">
+                      <span className="font-mono text-2xl font-bold tracking-tight text-gray-900">
+                        {formatPrice(candidate.discovered_price)}
+                      </span>
+                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
+                        {formatCapacity(candidate.extracted_specs)}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
         )}
 
         <div className="mt-6 text-xs text-gray-500">
