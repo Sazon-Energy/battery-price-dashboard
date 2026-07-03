@@ -6,8 +6,7 @@ const DEFAULT_SORT_COLUMNS = ['manufacturer', 'name', 'discovered_at']
 const SORT_OPTIONS = [
   { column: 'manufacturer', label: 'Manufacturer' },
   { column: 'name', label: 'Battery Name' },
-  { column: 'discovered_at', label: 'Discovered' },
-  { column: 'confidence_score', label: 'Confidence' }
+  { column: 'discovered_at', label: 'Discovered' }
 ]
 export default function CandidateReview() {
   const [candidates, setCandidates] = useState([])
@@ -50,7 +49,6 @@ export default function CandidateReview() {
             discovered_at,
             discovered_price,
             extracted_specs,
-            confidence_score,
             manufacturers ( name )
           `)
           .eq('status', 'pending')
@@ -146,8 +144,6 @@ export default function CandidateReview() {
         return candidate.name || ''
       case 'discovered_at':
         return candidate.discovered_at || ''
-      case 'confidence_score':
-        return candidate.confidence_score || 0
       default:
         return ''
     }
@@ -214,11 +210,6 @@ export default function CandidateReview() {
     const kwh = specs?.capacity_kwh
     if (kwh == null) return '—'
     return `${kwh} kWh`
-  }
-
-  function formatConfidence(score) {
-    if (score == null || score === 0) return null
-    return `${Math.round(score)}% confidence`
   }
 
   if (loading) {
@@ -380,22 +371,6 @@ export default function CandidateReview() {
                         {formatCapacity(candidate.extracted_specs)}
                       </span>
                     </div>
-
-                    {formatConfidence(candidate.confidence_score) && (
-                      <div className="flex justify-end">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                            candidate.confidence_score >= 70
-                              ? 'bg-green-100 text-green-700'
-                              : candidate.confidence_score >= 40
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-red-100 text-red-700'
-                          }`}
-                        >
-                          {formatConfidence(candidate.confidence_score)}
-                        </span>
-                      </div>
-                    )}
                   </div>
                 )
               })}
@@ -404,7 +379,7 @@ export default function CandidateReview() {
         )}
 
         <div className="mt-6 text-xs text-gray-500">
-          Capacity is auto-extracted from the product page and may need verification. Battery class is left unset and can be assigned later. A confidence badge appears only when the LLM fallback extractor was used to fill in a gap - candidates extracted cleanly by the deterministic scraper won't show one.
+          Capacity is auto-extracted from the product page and may need verification. Battery class is left unset and can be assigned later.
         </div>
       </div>
     </div>

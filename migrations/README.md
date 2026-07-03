@@ -9,6 +9,7 @@ These migrations add automated battery discovery functionality to the Battery Pr
 1. **001_create_manufacturers_table.sql** - Creates manufacturers table with seed data for 5 manufacturers
 2. **002_create_battery_candidates_table.sql** - Creates battery_candidates table for discovered products
 3. **004_update_batteries_table.sql** - Updates batteries table with discovery tracking columns
+4. **008_remove_confidence_scoring.sql** - Drops the unused confidence_score/auto_approved columns (confidence-based auto-approval was never built)
 
 **Note:** Discovery configuration is stored in `config/discovery-config.json` (not in database).
 
@@ -66,9 +67,7 @@ Stores discovered battery products pending review and approval.
 - `url`, `normalized_url` - Product URLs (normalized for deduplication)
 - `name`, `manufacturer_id` - Product identification
 - `extracted_specs` (JSONB) - Capacity, power, extraction metadata
-- `confidence_score` - Discovery confidence (0-100)
 - `status` - pending/approved/rejected
-- `auto_approved` - Whether candidate met auto-approval threshold
 - `battery_id` - Link to batteries table when approved
 
 **Extracted specs structure:**
@@ -105,7 +104,6 @@ Discovery system configuration is stored in `config/discovery-config.json` and d
 - `enabled` - Master switch for discovery
 - `maxCandidatesPerRun` - Limit candidates per run (default: 5)
 - `manufacturersPerRun` - Manufacturers to check per run (default: 1)
-- `autoApproveThreshold` - Confidence for auto-approval (default: 50%)
 - `crawlDelayMs` - Delay between requests (default: 2000ms)
 
 ## Post-Migration Verification
