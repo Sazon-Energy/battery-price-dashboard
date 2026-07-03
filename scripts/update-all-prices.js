@@ -179,7 +179,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   } else {
     updateAllPrices().then(summary => {
       console.log('\n✨ Batch update completed!');
-      process.exit(summary.failed > 0 ? 1 : 0);
+      // Fail the whole run only when nothing succeeded (e.g. database down,
+      // bad credentials, or the initial battery fetch itself failed) - a
+      // handful of individual scrape failures (dead product URLs, one-off
+      // site hiccups) shouldn't block the other batteries' prices from
+      // updating. Those are already logged to price_extraction_failures
+      // for follow-up.
+      const totalFailure = Boolean(summary.error) || (summary.total > 0 && summary.successful === 0);
+      process.exit(totalFailure ? 1 : 0);
     }).catch(error => {
       console.error('\n❌ Batch update failed:', error);
       process.exit(1);
