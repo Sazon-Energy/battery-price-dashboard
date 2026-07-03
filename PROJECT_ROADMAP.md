@@ -73,8 +73,8 @@ Automatically discover new consumer battery products from manufacturer websites,
 - name, manufacturer_id
 - extracted_specs (capacity, power - JSON)
 - discovered_price, battery_class_id
-- confidence_score, status (pending/approved/rejected)
-- auto_approved, battery_id (link to batteries table)
+- status (pending/approved/rejected)
+- battery_id (link to batteries table)
 - discovered_at, reviewed_at, rejection_reason
 ```
 
@@ -84,7 +84,7 @@ Automatically discover new consumer battery products from manufacturer websites,
 - manufacturers_per_run (1)
 - min_price, max_price
 - required_keywords[], exclude_keywords[]
-- auto_approve_threshold, crawl_delay_ms
+- crawl_delay_ms
 ```
 
 ### Implementation Phases
@@ -205,7 +205,7 @@ Automatically discover new consumer battery products from manufacturer websites,
 - Unique identifying information (name, model, URL) is what matters for discovery
 - User can correct specs during one-time approval process
 - Prevents need for ongoing data cleanup of auto-approved batteries
-- Confidence scoring kept for future improvements, but not used for auto-approval
+- Confidence scoring was tried and removed (2026-07-03) - every candidate requires manual review; auto-approval is not implemented
 
 ---
 

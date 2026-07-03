@@ -273,8 +273,7 @@ function cleanProductName(name) {
  *
  * If deterministic extraction (regex capacity/power, extractPriceFromHtml)
  * comes back incomplete, falls back to a Claude Haiku 4.5 call - bounded by
- * llmBudget.remaining - to fill in the gaps and produce a real
- * confidence_score, instead of leaving it hardcoded at 0.
+ * llmBudget.remaining - to fill in the gaps.
  */
 async function analyzeBatteryProduct(url, manufacturer, llmBudget) {
   try {
@@ -329,7 +328,6 @@ async function analyzeBatteryProduct(url, manufacturer, llmBudget) {
     let priceMethod = regexPriceMethod;
     let capacityKwh = capacityResult ? capacityResult.value : null;
     let powerW = powerResult.continuous ? powerResult.continuous.value : null;
-    let confidenceScore = 0;
 
     const needsLlmFallback = price === null || capacityKwh === null || powerW === null;
 
@@ -351,7 +349,6 @@ async function analyzeBatteryProduct(url, manufacturer, llmBudget) {
         if (powerW === null && llmResult.power_w != null) {
           powerW = llmResult.power_w;
         }
-        confidenceScore = llmResult.confidence_score;
       }
     }
 
@@ -392,8 +389,7 @@ async function analyzeBatteryProduct(url, manufacturer, llmBudget) {
       name,
       extractedSpecs,
       discoveredPrice: price,
-      priceMethod,
-      confidenceScore
+      priceMethod
     };
 
   } catch (error) {
@@ -540,7 +536,6 @@ async function discoverBatteries() {
             manufacturer_id: manufacturer.id,
             extracted_specs: result.extractedSpecs,
             discovered_price: result.discoveredPrice,
-            confidence_score: result.confidenceScore,
             status: 'pending'
           });
 

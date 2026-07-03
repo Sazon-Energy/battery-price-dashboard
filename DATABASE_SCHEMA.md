@@ -76,9 +76,7 @@ This document describes all tables in the battery price monitoring system. Use t
 | extracted_specs | jsonb | Extracted capacity/power specs with metadata |
 | discovered_price | real | Price at time of discovery |
 | battery_class_id | uuid | Foreign key to battery_classes(id) (nullable) |
-| confidence_score | real | Discovery confidence 0-100 |
 | status | text | 'pending', 'approved', or 'rejected' |
-| auto_approved | boolean | Whether candidate met auto-approval threshold |
 | rejection_reason | text | Why candidate was rejected (nullable) |
 | discovered_at | timestamptz | When candidate was discovered |
 | reviewed_at | timestamptz | When candidate was reviewed (nullable) |
@@ -88,6 +86,7 @@ This document describes all tables in the battery price monitoring system. Use t
 **Key Points:**
 - `manufacturer_id` IS a foreign key (unlike batteries.supplier which is text)
 - `normalized_url` must be unique (used for deduplication)
+- All candidates require manual review - there is no auto-approval
 - After approval, data is copied to `batteries` table
 - Candidates are NOT automatically linked to batteries after approval
 

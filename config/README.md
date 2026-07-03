@@ -58,15 +58,6 @@ This directory contains configuration files for the automated battery discovery 
 - Usually empty - let each manufacturer define their own exclude keywords
 - Example: `["refurbished", "open box"]`
 
-### Auto-Approval
-
-**`autoApproveThreshold`** (number, default: `50`)
-- Confidence score (0-100) required for auto-approval
-- `50` = must have name + capacity + power (recommended)
-- `70` = stricter requirements, less automation
-- `30` = more lenient, more auto-approvals
-- All candidates are created regardless; this only affects auto-approval flag
-
 ### Crawling Behavior
 
 **`crawlDelayMs`** (integer, default: `2000`)
@@ -133,7 +124,6 @@ const config = { ...baseConfig, ...envConfig };
   "maxCandidatesPerRun": 5,
   "manufacturersPerRun": 1,
   "maxPagesPerManufacturer": 5,
-  "autoApproveThreshold": 50,
   "crawlDelayMs": 2000
 }
 ```
@@ -145,7 +135,6 @@ const config = { ...baseConfig, ...envConfig };
   "maxCandidatesPerRun": 20,
   "manufacturersPerRun": 3,
   "maxPagesPerManufacturer": 20,
-  "autoApproveThreshold": 30,
   "crawlDelayMs": 1000
 }
 ```
@@ -157,7 +146,6 @@ const config = { ...baseConfig, ...envConfig };
   "maxCandidatesPerRun": 2,
   "manufacturersPerRun": 1,
   "maxPagesPerManufacturer": 2,
-  "autoApproveThreshold": 0,
   "crawlDelayMs": 500
 }
 ```
@@ -169,7 +157,6 @@ const config = { ...baseConfig, ...envConfig };
   "maxCandidatesPerRun": 5,
   "manufacturersPerRun": 1,
   "maxPagesPerManufacturer": 10,
-  "autoApproveThreshold": 50,
   "crawlDelayMs": 2000
 }
 ```
@@ -201,7 +188,6 @@ After changing configuration:
 
 **Too many candidates:**
 - Decrease `maxCandidatesPerRun`
-- Increase `autoApproveThreshold` to reduce auto-approvals
 - Add global `excludeKeywords`
 - Review manufacturer-specific exclude keywords in database
 
@@ -211,6 +197,5 @@ After changing configuration:
 - Decrease `manufacturersPerRun`
 
 **Low quality candidates:**
-- Increase `autoApproveThreshold`
 - Add more specific `excludeKeywords` per manufacturer
 - Review and refine manufacturer `includeKeywords` in database
