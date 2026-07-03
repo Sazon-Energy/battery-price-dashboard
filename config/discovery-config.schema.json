@@ -55,6 +55,15 @@
     "userAgent": {
       "type": "string",
       "description": "User-Agent string sent with HTTP requests. Should identify your crawler and provide contact info."
+    },
+    "llmFallbackEnabled": {
+      "type": "boolean",
+      "description": "Whether to fall back to a Claude Haiku 4.5 extraction/classification call when deterministic regex/CSS-selector extraction fails or is incomplete. Requires ANTHROPIC_API_KEY to be set; silently skipped otherwise."
+    },
+    "llmFallbackMaxCallsPerRun": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Maximum number of LLM fallback calls allowed per script run (discover-batteries.js and update-all-prices.js each get their own budget of this size). Bounds cost per run."
     }
   },
   "required": [

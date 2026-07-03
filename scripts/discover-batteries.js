@@ -25,6 +25,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { extractPriceFromHtml } from '../lib/price-extractor.js';
+import { extractBatteryInfoWithLLM } from '../lib/llm-extractor.js';
+import { normalizeUrl, logPriceExtractionFailure } from '../lib/failure-logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,18 +71,6 @@ try {
 if (!CONFIG.enabled) {
   console.log('⏸️  Discovery is disabled in configuration. Exiting.');
   process.exit(0);
-}
-
-/**
- * Normalize URL by removing query parameters and fragments
- */
-function normalizeUrl(url) {
-  try {
-    const urlObj = new URL(url);
-    return urlObj.origin + urlObj.pathname;
-  } catch (e) {
-    return url;
-  }
 }
 
 /**
@@ -279,9 +269,14 @@ function cleanProductName(name) {
 }
 
 /**
- * Analyze product page and extract battery specs + price
+ * Analyze product page and extract battery specs + price.
+ *
+ * If deterministic extraction (regex capacity/power, extractPriceFromHtml)
+ * comes back incomplete, falls back to a Claude Haiku 4.5 call - bounded by
+ * llmBudget.remaining - to fill in the gaps and produce a real
+ * confidence_score, instead of leaving it hardcoded at 0.
  */
-async function analyzeBatteryProduct(url, manufacturer) {
+async function analyzeBatteryProduct(url, manufacturer, llmBudget) {
   try {
     const response = await axios.get(url, {
       headers: { 'User-Agent': CONFIG.userAgent },
@@ -328,10 +323,41 @@ async function analyzeBatteryProduct(url, manufacturer) {
     // Extract specs
     const capacityResult = extractCapacity(bodyText, name);
     const powerResult = extractPower(bodyText);
+    const { price: regexPrice, method: regexPriceMethod } = extractPriceFromHtml(response.data, url);
+
+    let price = regexPrice;
+    let priceMethod = regexPriceMethod;
+    let capacityKwh = capacityResult ? capacityResult.value : null;
+    let powerW = powerResult.continuous ? powerResult.continuous.value : null;
+    let confidenceScore = 0;
+
+    const needsLlmFallback = price === null || capacityKwh === null || powerW === null;
+
+    if (needsLlmFallback && CONFIG.llmFallbackEnabled && llmBudget.remaining > 0) {
+      llmBudget.remaining--;
+      const llmResult = await extractBatteryInfoWithLLM({ pageText: bodyText, url });
+
+      if (llmResult) {
+        if (llmResult.is_battery === false) {
+          return { skipped: true, reason: 'llm_classified_not_battery' };
+        }
+        if (price === null && llmResult.price != null) {
+          price = llmResult.price;
+          priceMethod = 'LLM fallback (Claude Haiku 4.5)';
+        }
+        if (capacityKwh === null && llmResult.capacity_kwh != null) {
+          capacityKwh = llmResult.capacity_kwh;
+        }
+        if (powerW === null && llmResult.power_w != null) {
+          powerW = llmResult.power_w;
+        }
+        confidenceScore = llmResult.confidence_score;
+      }
+    }
 
     // Check capacity range
-    if (capacityResult && (capacityResult.value < manufacturer.min_capacity_kwh || capacityResult.value > manufacturer.max_capacity_kwh)) {
-      return { skipped: true, reason: 'capacity_out_of_range', capacity: capacityResult.value };
+    if (capacityKwh !== null && (capacityKwh < manufacturer.min_capacity_kwh || capacityKwh > manufacturer.max_capacity_kwh)) {
+      return { skipped: true, reason: 'capacity_out_of_range', capacity: capacityKwh };
     }
 
     // Build extracted specs
@@ -342,12 +368,18 @@ async function analyzeBatteryProduct(url, manufacturer) {
       extractedSpecs.capacity_source = capacityResult.source;
       extractedSpecs.capacity_matched = capacityResult.matched;
       extractedSpecs.capacity_priority = capacityResult.priority;
+    } else if (capacityKwh !== null) {
+      extractedSpecs.capacity_kwh = capacityKwh;
+      extractedSpecs.capacity_source = 'llm_fallback';
     }
 
     if (powerResult.continuous) {
       extractedSpecs.power_w = powerResult.continuous.value;
       extractedSpecs.power_source = 'body_text';
       extractedSpecs.power_matched = powerResult.continuous.matched;
+    } else if (powerW !== null) {
+      extractedSpecs.power_w = powerW;
+      extractedSpecs.power_source = 'llm_fallback';
     }
 
     if (powerResult.peak) {
@@ -355,40 +387,18 @@ async function analyzeBatteryProduct(url, manufacturer) {
       extractedSpecs.peak_power_matched = powerResult.peak.matched;
     }
 
-    // Extract price using shared extractor (same logic as price scraper)
-    const { price, method } = extractPriceFromHtml(response.data, url);
-
     return {
       skipped: false,
       name,
       extractedSpecs,
       discoveredPrice: price,
-      priceMethod: method
+      priceMethod,
+      confidenceScore
     };
 
   } catch (error) {
     console.log(`   ❌ Error analyzing product: ${error.message}`);
     return { skipped: true, reason: 'error', error: error.message };
-  }
-}
-
-/**
- * Log a price extraction failure for a battery product page
- */
-async function logPriceFailure(url, normalizedUrl, manufacturer, name, extractedSpecs, reason) {
-  const { error } = await supabase
-    .from('price_extraction_failures')
-    .insert({
-      url,
-      normalized_url: normalizedUrl,
-      manufacturer_id: manufacturer.id,
-      product_name: name,
-      extracted_specs: extractedSpecs || {},
-      failure_reason: reason
-    });
-
-  if (error) {
-    console.log(`   ⚠️  Failed to log price failure: ${error.message}`);
   }
 }
 
@@ -452,6 +462,7 @@ async function discoverBatteries() {
   console.log(`📋 Found ${manufacturers.length} enabled+verified manufacturer(s) to process\n`);
 
   let totalCandidatesCreated = 0;
+  const llmBudget = { remaining: CONFIG.llmFallbackMaxCallsPerRun ?? 0 };
 
   for (const manufacturer of manufacturers) {
     console.log(`\n${'═'.repeat(70)}`);
@@ -502,7 +513,7 @@ async function discoverBatteries() {
       console.log(`\n[${productsAnalyzed}] Analyzing: ${url}`);
 
       // Analyze product
-      const result = await analyzeBatteryProduct(url, manufacturer);
+      const result = await analyzeBatteryProduct(url, manufacturer, llmBudget);
 
       if (result.skipped) {
         console.log(`   ⏭️  Skipped: ${result.reason}`);
@@ -510,14 +521,14 @@ async function discoverBatteries() {
         // Battery product confirmed, but no price found.
         // Log to price_extraction_failures so the failure is visible and actionable.
         console.log(`   ⚠️  No price extracted for ${result.name} - logging failure`);
-        await logPriceFailure(
+        await logPriceExtractionFailure(supabase, {
           url,
           normalizedUrl,
-          manufacturer,
-          result.name,
-          result.extractedSpecs,
-          'no_price_extracted'
-        );
+          manufacturerId: manufacturer.id,
+          productName: result.name,
+          extractedSpecs: result.extractedSpecs,
+          reason: 'no_price_extracted'
+        });
       } else {
         // Create candidate with price (all candidates require manual review)
         const { error: insertError } = await supabase
@@ -529,6 +540,7 @@ async function discoverBatteries() {
             manufacturer_id: manufacturer.id,
             extracted_specs: result.extractedSpecs,
             discovered_price: result.discoveredPrice,
+            confidence_score: result.confidenceScore,
             status: 'pending'
           });
 

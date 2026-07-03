@@ -3,16 +3,25 @@ dotenv.config({ path: '.env.local' })
 
 import { supabaseAdmin } from './supabase-admin.js'
 import scrapePrice from './scrape-battery.js'
+import { normalizeUrl, logPriceExtractionFailure } from '../lib/failure-logger.js'
 
 async function updateBatteryPrice(battery) {
-  const { id: batteryId, name: batteryName } = battery;
+  const { id: batteryId, name: batteryName, target_url: targetUrl } = battery;
   console.log(`\n🚀 Starting price update for ${batteryName}...`);
-  
+
   // Step 1: Scrape the price using the generic scraper
   const scrapeResult = await scrapePrice(batteryId);
-  
+
   if (!scrapeResult.success) {
     console.log(`❌ ${batteryName} scraping failed:`, scrapeResult.error);
+    // Log to price_extraction_failures so price-update failures are visible
+    // the same way discovery failures already are.
+    await logPriceExtractionFailure(supabaseAdmin, {
+      url: targetUrl,
+      normalizedUrl: normalizeUrl(targetUrl),
+      productName: batteryName,
+      reason: scrapeResult.error || 'price_update_failed'
+    });
     return { success: false, batteryId, batteryName, error: scrapeResult.error };
   }
   
