@@ -36,6 +36,7 @@ export async function POST(request) {
         name: candidate.name,
         target_url: candidate.normalized_url,
         supplier: candidate.manufacturers?.name || null,
+        manufacturer_id: candidate.manufacturer_id,
         current_price: candidate.discovered_price
       })
       .select()
@@ -63,12 +64,13 @@ export async function POST(request) {
       }
     }
 
-    // Mark candidate approved
+    // Mark candidate approved and link it to the battery it became.
     const { error: updateError } = await supabaseAdmin
       .from('battery_candidates')
       .update({
         status: 'approved',
-        reviewed_at: new Date().toISOString()
+        reviewed_at: new Date().toISOString(),
+        battery_id: battery.id
       })
       .eq('id', candidateId);
 
