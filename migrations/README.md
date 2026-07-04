@@ -8,8 +8,16 @@ These migrations add automated battery discovery functionality to the Battery Pr
 
 1. **001_create_manufacturers_table.sql** - Creates manufacturers table with seed data for 5 manufacturers
 2. **002_create_battery_candidates_table.sql** - Creates battery_candidates table for discovered products
-3. **004_update_batteries_table.sql** - Updates batteries table with discovery tracking columns
-4. **008_remove_confidence_scoring.sql** - Drops the unused confidence_score/auto_approved columns (confidence-based auto-approval was never built)
+3. **004_update_batteries_table.sql** - Adds candidate_id/discovered_by to batteries (both later dropped by 005)
+4. **005_remove_cross_references.sql** - Drops candidate_id/discovered_by/battery_id - see "Schema Evolution" in DATABASE_SCHEMA.md for why this was later revisited
+5. **006_add_scrape_verified.sql** - Adds manufacturers.scrape_verified
+6. **007_create_price_extraction_failures.sql** - Creates price_extraction_failures log table
+7. **008_remove_confidence_scoring.sql** - Drops the unused confidence_score/auto_approved columns (confidence-based auto-approval was never built)
+8. **009_varchar_to_text.sql** - Converts batteries.name/supplier and battery_classes.short_name from varchar(n) to text with explicit CHECK length constraints
+9. **010_drop_long_description_json.sql** - Drops battery_classes.long_description_json (never read by any application code)
+10. **011_drop_rejection_reason.sql** - Drops battery_candidates.rejection_reason (half-finished feature, never surfaced in the UI)
+11. **012_add_battery_candidates_battery_id.sql** - Reintroduces battery_candidates.battery_id (one direction only), set at approval time
+12. **013_add_batteries_manufacturer_id.sql** - Adds batteries.manufacturer_id FK, backfilled from the existing supplier text column
 
 **Note:** Discovery configuration is stored in `config/discovery-config.json` (not in database).
 
@@ -20,7 +28,7 @@ These migrations add automated battery discovery functionality to the Battery Pr
 1. Go to your Supabase project dashboard
 2. Navigate to **SQL Editor**
 3. Create a new query
-4. Copy and paste the contents of each migration file **in order** (001, 002, 004)
+4. Copy and paste the contents of each migration file **in numeric order** (see the list above)
 5. Click **Run** for each migration
 
 ### Option 2: Supabase CLI (if installed)
@@ -29,10 +37,10 @@ These migrations add automated battery discovery functionality to the Battery Pr
 # Run all migrations
 supabase db push
 
-# Or run individually
+# Or run individually, in numeric order
 psql $DATABASE_URL < migrations/001_create_manufacturers_table.sql
 psql $DATABASE_URL < migrations/002_create_battery_candidates_table.sql
-psql $DATABASE_URL < migrations/004_update_batteries_table.sql
+# ...continue through the highest-numbered file
 ```
 
 ### Option 3: Node.js Script (Custom)
@@ -87,11 +95,11 @@ Stores discovered battery products pending review and approval.
 ### Updated Tables
 
 #### `batteries`
-Added two new columns:
-- `candidate_id` - Reference to battery_candidates.id (if discovered automatically)
-- `discovered_by` - 'manual' or 'auto' (how battery was added)
+Migration 004 originally added `candidate_id` and `discovered_by`; both were dropped again by migration 005 (see DATABASE_SCHEMA.md's "Schema Evolution" section for the full history). As of migration 013, `batteries` instead has:
+- `manufacturer_id` - FK to manufacturers(id), authoritative source of manufacturer identity
+- `supplier` - kept as a denormalized text copy of `manufacturers.name` for display
 
-All existing batteries are marked as `discovered_by = 'manual'`.
+The candidate-to-battery link lives on the other side of the relationship: `battery_candidates.battery_id` (added by migration 012), not a column on `batteries`.
 
 ### Configuration
 
@@ -118,7 +126,7 @@ SELECT name, domain, enabled FROM manufacturers ORDER BY name;
 SELECT column_name, data_type
 FROM information_schema.columns
 WHERE table_name = 'batteries'
-AND column_name IN ('candidate_id', 'discovered_by');
+AND column_name IN ('manufacturer_id', 'supplier');
 
 -- Check battery_candidates table structure
 \d battery_candidates
@@ -135,15 +143,7 @@ After running these migrations:
 
 ## Rollback (if needed)
 
-To rollback these migrations:
-
-```sql
--- Drop in reverse order
-ALTER TABLE batteries DROP COLUMN IF EXISTS discovered_by;
-ALTER TABLE batteries DROP COLUMN IF EXISTS candidate_id;
-DROP TABLE IF EXISTS battery_candidates;
-DROP TABLE IF EXISTS manufacturers;
-```
+This section originally described dropping `battery_candidates`/`manufacturers` entirely, written back when this was a fresh feature with no data. That's no longer safe - these tables now hold real production data (candidates history, manufacturer configuration). If you need to undo a specific migration, write a targeted reverse migration for just that file's changes instead of dropping tables wholesale.
 
 ## Notes
 

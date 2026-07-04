@@ -7,7 +7,7 @@ export async function POST(request) {
   if (authError) return authError;
 
   try {
-    const { candidateId, reason } = await request.json();
+    const { candidateId } = await request.json();
     if (!candidateId) {
       return NextResponse.json({ error: 'candidateId required' }, { status: 400 });
     }
@@ -18,7 +18,6 @@ export async function POST(request) {
       .from('battery_candidates')
       .update({
         status: 'rejected',
-        rejection_reason: reason || null,
         reviewed_at: new Date().toISOString()
       })
       .eq('id', candidateId)
