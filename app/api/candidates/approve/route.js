@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '../../../../lib/supabase-admin';
-import { requireAdminToken } from '../../../../lib/admin-auth';
+import { requireSession } from '../../../../lib/session-auth';
 
 export async function POST(request) {
-  const authError = requireAdminToken(request);
+  const authError = await requireSession(request);
   if (authError) return authError;
 
   try {

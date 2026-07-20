@@ -10,7 +10,8 @@ Purpose: Help an AI contributor quickly understand and work in this repository (
 - Big picture (core components)
   - Frontend: Next.js app (app/) — primary UI lives in `app/page.js` and global layout in `app/layout.js`.
   - Client DB access: `lib/supabase.js` (uses `NEXT_PUBLIC_*` keys; safe for client-side reads).
-  - Server/API routes: `app/api/price-history/route.js` and `app/api/update-price/route.js` — prefer these over exposing service keys to the client.
+  - Server/API routes: `app/api/price-history/route.js` (public, read-only) and `app/api/batteries/[id]/route.js` (session-login required, edits name/class) — prefer these over exposing service keys to the client.
+  - Auth: `lib/session-auth.js` issues/verifies an 8-hour signed session cookie (`jose`), set via `POST /api/login` (password checked against `ADMIN_PASSWORD`). Protected routes call `await requireSession(request)` as their first line.
   - Scrapers & batch jobs: `scripts/` — `scrape-battery.js` contains the scraper heuristics; `update-all-prices.js` orchestrates batch runs and calls `supabase-admin` helpers.
   - Admin DB client: `scripts/supabase-admin.js` (requires `SUPABASE_SERVICE_ROLE_KEY`).
   - CI/schedule: GitHub Actions workflow at `.github/workflows/update-battery-prices.yml` triggers scheduled scraping.

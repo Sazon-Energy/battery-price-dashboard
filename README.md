@@ -49,7 +49,7 @@ Automated price tracking and discovery for consumer battery products (power stat
 - **Price-gated candidates**: Only create candidates when price extraction succeeds; log failures separately
 - **Manual approval only**: Prioritize data quality; specs can be corrected during approval
 - **Separation of concerns**: Discovery finds products; existing scraper handles price tracking
-- **Security layers**: RLS on tables + admin token on write endpoints + service role isolation
+- **Security layers**: RLS on tables + session-cookie login on write endpoints + service role isolation
 
 ---
 
@@ -103,9 +103,14 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...your-service-role-key
 
-# Admin Token (generate with: openssl rand -hex 32)
-ADMIN_TOKEN=your_random_32_byte_hex_string
+# Admin login password (used to log in at /candidates or the dashboard's Edit panel)
+ADMIN_PASSWORD=your_chosen_password
+
+# Session cookie signing secret (generate with: openssl rand -base64 32)
+SESSION_SECRET=your_random_32_byte_secret
 ```
+
+A full list of required variables (with placeholder values) is also kept in `.env.example`.
 
 **Security Notes:**
 
@@ -114,11 +119,12 @@ ADMIN_TOKEN=your_random_32_byte_hex_string
 | `NEXT_PUBLIC_SUPABASE_URL` | Browser, Server | Public | Supabase project endpoint |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser | Public (safe) | Read-only access with RLS |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server only | Secret | Bypass RLS for admin operations |
-| `ADMIN_TOKEN` | Server only | Secret | Protect approve/reject endpoints |
+| `ADMIN_PASSWORD` | Server only | Secret | Login credential for `/api/login` |
+| `SESSION_SECRET` | Server only | Secret | Signs the 8-hour session cookie |
 
 - `NEXT_PUBLIC_*` vars are embedded in browser JS bundle (safe for anon key due to RLS)
 - Service role key is **never** sent to browser, only used in API routes and scripts
-- Admin token is sent in `X-Admin-Token` header from browser but validated server-side
+- Logging in at `/api/login` exchanges `ADMIN_PASSWORD` for an httpOnly, signed session cookie (8-hour expiry) — the password itself is never stored client-side
 
 ### 4. Start Development Server
 
@@ -180,8 +186,8 @@ GitHub Actions workflow (`.github/workflows/discover-batteries.yml`):
 ### Access the Admin UI
 
 1. Navigate to `/candidates` (not linked from main UI)
-2. On first approve/reject, you'll be prompted for the admin token
-3. Token is cached in `sessionStorage` (cleared when tab closes)
+2. If not logged in, a password form appears in the page header — log in with `ADMIN_PASSWORD`
+3. The session persists for 8 hours via a secure cookie (no need to log in again per action)
 
 ### Approve a Candidate
 
@@ -239,14 +245,15 @@ Add these in Vercel dashboard (Settings → Environment Variables):
 NEXT_PUBLIC_SUPABASE_URL = https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY = eyJhbGci...your-anon-key
 SUPABASE_SERVICE_ROLE_KEY = eyJhbGci...your-service-role-key
-ADMIN_TOKEN = your_random_32_byte_hex_string
+ADMIN_PASSWORD = your_chosen_password
+SESSION_SECRET = your_random_32_byte_secret
 ```
 
 **Security in Production:**
 
 - `NEXT_PUBLIC_*` vars are bundled into JS (safe - anon key + RLS)
 - `SUPABASE_SERVICE_ROLE_KEY` is only available to API routes (server-side)
-- `ADMIN_TOKEN` protects `/api/candidates/approve` and `/api/candidates/reject` endpoints
+- `ADMIN_PASSWORD`/`SESSION_SECRET` protect `/api/candidates/approve`, `/api/candidates/reject`, and `/api/batteries/[id]` (battery editing) via the session-cookie login
 - Never commit secrets to git (`.env.local` is in `.gitignore`)
 
 ### Deployment Workflow
@@ -271,15 +278,16 @@ npx vercel --prod
    - Anon key can read batteries/price_history but not modify
    - Service role bypasses RLS for admin operations
 
-2. **Admin Token Protection**:
-   - `/api/candidates/approve` and `/api/candidates/reject` require `X-Admin-Token` header
-   - Token validated server-side against `process.env.ADMIN_TOKEN`
-   - Invalid token → 401 Unauthorized
+2. **Session Login Protection**:
+   - `/api/candidates/approve`, `/api/candidates/reject`, and `/api/batteries/[id]` (battery editing) all require a valid session cookie
+   - `POST /api/login` validates a password against `process.env.ADMIN_PASSWORD` (constant-time comparison) and, on success, issues a signed JWT in an httpOnly cookie (`lib/session-auth.js`), signed with `SESSION_SECRET` via the `jose` library
+   - The cookie expires after 8 hours (`SESSION_DURATION_SECONDS`); each protected route calls `requireSession(request)` to verify it, returning 401 if missing/invalid/expired
+   - `POST /api/logout` clears the cookie; `GET /api/session` lets the client check login state without triggering 401-driven error handling
 
 3. **Key Isolation**:
    - Browser gets anon key (read-only via RLS)
    - Server-side code uses service role key (full access, never exposed to browser)
-   - Admin token stored in browser sessionStorage (prompt once per session)
+   - Session cookie is httpOnly (inaccessible to JS) and `Secure` in production; the password itself is never stored client-side
 
 4. **No Public Write Access**:
    - All database writes go through authenticated API routes
@@ -297,8 +305,8 @@ npx vercel --prod
 **Never:**
 - Commit `.env.local` to git
 - Expose service role key to browser
-- Share admin token publicly
-- Use production keys in local development (use same Supabase instance but protect via token)
+- Share `ADMIN_PASSWORD` or `SESSION_SECRET` publicly
+- Use production keys in local development (use same Supabase instance but protect via password)
 
 ---
 
@@ -307,16 +315,23 @@ npx vercel --prod
 ```
 battery-price-dashboard/
 ├── app/                          # Next.js App Router
-│   ├── page.js                   # Main dashboard (batteries + price history)
+│   ├── page.js                   # Main dashboard (batteries, price history, edit UI)
 │   ├── candidates/page.js        # Admin UI for candidate review
+│   ├── components/
+│   │   └── LoginForm.js          # Shared password login form (candidates + edit UI)
 │   └── api/
+│       ├── login/route.js        # POST endpoint - exchanges password for session cookie
+│       ├── logout/route.js       # POST endpoint - clears session cookie
+│       ├── session/route.js      # GET endpoint - { authenticated } check
+│       ├── batteries/[id]/route.js # PATCH endpoint (session required) - edit name/class
 │       └── candidates/
-│           ├── approve/route.js  # POST endpoint (admin token required)
-│           └── reject/route.js   # POST endpoint (admin token required)
+│           ├── approve/route.js  # POST endpoint (session required)
+│           └── reject/route.js   # POST endpoint (session required)
 ├── lib/
 │   ├── supabase.js               # Browser-side client (anon key)
 │   ├── supabase-admin.js         # Server-side client (service role key)
-│   ├── admin-auth.js             # Admin token validation helper
+│   ├── session-auth.js           # Session cookie sign/verify helpers (jose)
+│   ├── session-client.js         # Client-side checkSession()/logout() helpers
 │   ├── price-extractor.js        # Shared price extraction logic (5 methods)
 │   ├── battery-crawler.js        # URL discovery + content filtering
 │   ├── spec-extractor.js         # Capacity/power parsing
@@ -382,11 +397,11 @@ Then run discovery manually or wait for next scheduled run.
 - Restart dev server after changing `.env.local`
 - Check Supabase dashboard → Settings → API for correct key
 
-### Admin Token Keeps Prompting
+### Keeps Asking to Log In
 
-- Clear browser sessionStorage (DevTools → Application → Session Storage)
-- Verify `ADMIN_TOKEN` in `.env.local` matches what you're entering
-- Check for extra spaces or quotes around the token value
+- Sessions expire after 8 hours — log in again with `ADMIN_PASSWORD`
+- Verify `SESSION_SECRET` hasn't changed (rotating it invalidates all existing sessions)
+- Check DevTools → Application → Cookies for a `session` cookie; if missing, confirm cookies aren't being blocked for the site
 
 ### Discovery Finds No Candidates
 

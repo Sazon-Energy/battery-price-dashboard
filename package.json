@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "echo \"\\nBuild complete. Run 'npm start', then open http://localhost:3000\\n\"",
     "start": "next start",
     "discover": "node scripts/discover-batteries.js"
   },
@@ -14,6 +15,7 @@
     "axios": "^1.11.0",
     "cheerio": "^1.1.2",
     "dotenv": "^17.2.1",
+    "jose": "^6.2.3",
     "next": "^15.4.5",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

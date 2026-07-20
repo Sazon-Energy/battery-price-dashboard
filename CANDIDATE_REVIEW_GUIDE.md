@@ -5,19 +5,19 @@ The discovery script finds new battery products on verified manufacturer sites a
 
 ## Setup
 
-### 1. Set the admin token
-Generate a strong token and add it to `.env.local` (and to your hosting environment, e.g. Vercel):
+### 1. Set the admin password
+Choose a password and add it to `.env.local` (and to your hosting environment, e.g. Vercel), along with a signing secret for session cookies:
 
 ```bash
-openssl rand -hex 32
-# Add the output to .env.local:
-ADMIN_TOKEN=<generated-token>
+# .env.local
+ADMIN_PASSWORD=<your-chosen-password>
+SESSION_SECRET=$(openssl rand -base64 32)
 ```
 
-The token is required by the approve/reject API routes. Without it those endpoints return 401.
+`ADMIN_PASSWORD` is required by the approve/reject and battery-edit API routes (via a login-issued session cookie). Without it those endpoints return 401.
 
 ### 2. Open the admin page
-Navigate to `/candidates` (the page is intentionally not linked from the main UI). When you take an action, the page will prompt for the admin token once and cache it in `sessionStorage` for the rest of the browser session.
+Navigate to `/candidates` (the page is intentionally not linked from the main UI). If not logged in, a password form appears in the page header — log in there. The session persists for 8 hours via a secure cookie, so you won't be asked again until it expires.
 
 ## Reviewing Candidates
 

@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { checkSession, logout } from '../../lib/session-client'
+import LoginForm from '../components/LoginForm'
 
 const DEFAULT_SORT_COLUMNS = ['manufacturer', 'name', 'discovered_at']
 const SORT_OPTIONS = [
@@ -13,7 +15,7 @@ export default function CandidateReview() {
   const [lastDiscoveryRun, setLastDiscoveryRun] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [adminToken, setAdminToken] = useState('')
+  const [authenticated, setAuthenticated] = useState(null)
   const [pendingActionId, setPendingActionId] = useState(null)
   const [sortColumn, setSortColumn] = useState(null)
   const [sortDirection, setSortDirection] = useState('asc')
@@ -21,18 +23,13 @@ export default function CandidateReview() {
   const [resolvedCandidates, setResolvedCandidates] = useState({})
 
   useEffect(() => {
-    const stored = sessionStorage.getItem('adminToken')
-    if (stored) setAdminToken(stored)
+    checkSession().then(result => setAuthenticated(result.authenticated))
     fetchData()
   }, [])
 
-  function persistToken(token) {
-    setAdminToken(token)
-    if (token) {
-      sessionStorage.setItem('adminToken', token)
-    } else {
-      sessionStorage.removeItem('adminToken')
-    }
+  async function handleLogout() {
+    await logout()
+    setAuthenticated(false)
   }
 
   async function fetchData() {
@@ -72,28 +69,16 @@ export default function CandidateReview() {
     }
   }
 
-  async function callAdminApi(path, body, tokenOverride = null) {
-    const token = tokenOverride || adminToken
-
-    if (!token) {
-      const entered = window.prompt('Enter admin token:')
-      if (!entered) throw new Error('Admin token required')
-      persistToken(entered)
-      return callAdminApi(path, body, entered)
-    }
-
+  async function callAdminApi(path, body) {
     const response = await fetch(path, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Admin-Token': token
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     })
 
     if (response.status === 401) {
-      persistToken('')
-      throw new Error('Invalid admin token - cleared. Please try again.')
+      setAuthenticated(false)
+      throw new Error('Session expired - please log in again.')
     }
 
     const data = await response.json()
@@ -248,18 +233,21 @@ export default function CandidateReview() {
             </p>
           </div>
           <div className="text-right text-sm">
-            {adminToken ? (
+            {authenticated === true && (
               <div className="flex items-center gap-2">
-                <span className="text-green-600 font-medium">✓ Admin token set</span>
+                <span className="text-green-600 font-medium">✓ Logged in</span>
                 <button
-                  onClick={() => persistToken('')}
+                  onClick={handleLogout}
                   className="text-xs text-gray-500 underline hover:text-gray-700"
                 >
-                  Clear
+                  Log out
                 </button>
               </div>
-            ) : (
-              <span className="text-amber-600 font-medium">⚠ No admin token set</span>
+            )}
+            {authenticated === false && (
+              <div className="w-64">
+                <LoginForm onSuccess={() => setAuthenticated(true)} />
+              </div>
             )}
           </div>
         </div>
