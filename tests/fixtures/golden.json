@@ -1,0 +1,38 @@
+{
+  "jsonld.html": {
+    "price": 1299,
+    "method": "JSON-LD structured data"
+  },
+  "meta.html": {
+    "price": 899.99,
+    "method": "Meta tag"
+  },
+  "dataattr.html": {
+    "price": 2499,
+    "method": "Data attribute"
+  },
+  "css_money.html": {
+    "price": 1499,
+    "method": "CSS selector: span.money"
+  },
+  "css_sale.html": {
+    "price": 1499,
+    "method": "CSS selector: [class*=\"salePrice\"]"
+  },
+  "inline_sale.html": {
+    "price": 1799,
+    "method": "Inline JavaScript (sale price)"
+  },
+  "inline_cents.html": {
+    "price": 1299,
+    "method": "Inline JavaScript (regular price)"
+  },
+  "variant.html": {
+    "price": 2599,
+    "method": "Inline JavaScript (variant-specific)"
+  },
+  "none.html": {
+    "price": null,
+    "method": null
+  }
+}

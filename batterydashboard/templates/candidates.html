@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Candidate Review{% endblock %}
+
+{% block content %}
+  <div class="admin-header">
+    <h1>Candidate Review</h1>
+    <p class="muted">{{ pending_count }} pending {{ "candidate" if pending_count == 1 else "candidates" }}</p>
+    <p class="muted small">Last discovery run: {{ last_discovery_run_display }}</p>
+  </div>
+
+  {% if candidates|length == 0 %}
+    <div class="empty-box">No pending candidates to review</div>
+  {% else %}
+    <div class="sort-bar">
+      <span class="muted">Sort by:</span>
+      {% for option in sort_options %}
+        {% set is_active = (sort_column == option.column) %}
+        {% set next_dir = "desc" if (is_active and sort_direction == "asc") else "asc" %}
+        <a
+          class="chip {{ 'chip-active' if is_active else '' }}"
+          href="{{ url_for('admin.candidates', sort=option.column, dir=next_dir) }}"
+        >
+          {{ option.label }}{% if is_active %}{{ " ▲" if sort_direction == "asc" else " ▼" }}{% endif %}
+        </a>
+      {% endfor %}
+      {% if sort_column %}
+        <a class="chip-reset" href="{{ url_for('admin.candidates') }}">Reset to default</a>
+      {% endif %}
+    </div>
+
+    <div class="card-grid">
+      {% for candidate in candidates %}
+        <div class="card">
+          <div class="card-top">
+            <span class="card-manufacturer">{{ candidate.manufacturers.name if candidate.manufacturers else "Unknown" }}</span>
+            <span class="card-date">{{ candidate.discovered_at_display }}</span>
+          </div>
+
+          <a
+            class="card-name"
+            href="{{ candidate.normalized_url }}"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="{{ candidate.name }}"
+          >
+            {{ candidate.name }}
+          </a>
+
+          <div class="card-actions">
+            <form
+              method="post"
+              action="{{ url_for('admin.approve') }}"
+              onsubmit="return confirm('Approve this candidate and add it to tracked batteries?');"
+            >
+              <input type="hidden" name="candidate_id" value="{{ candidate.id }}" />
+              <button type="submit" class="btn btn-approve">Approve</button>
+            </form>
+            <form method="post" action="{{ url_for('admin.reject') }}">
+              <input type="hidden" name="candidate_id" value="{{ candidate.id }}" />
+              <button type="submit" class="btn btn-reject">Reject</button>
+            </form>
+          </div>
+
+          <div class="card-bottom">
+            <span class="card-price">{{ candidate.price_display }}</span>
+            <span class="card-capacity">{{ candidate.capacity_display }}</span>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <p class="muted small footer-note">
+    Capacity is auto-extracted from the product page and may need verification. Battery class is left
+    unset and can be assigned later.
+  </p>
+{% endblock %}

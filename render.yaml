@@ -1,0 +1,37 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# First deploy:
+#   1. Push this branch to GitHub.
+#   2. Render dashboard -> New + -> Blueprint -> connect this repository.
+#   3. Render creates the web service from this file. Set the `sync: false`
+#      secrets below in the dashboard (they are intentionally not stored here).
+#   4. After the secrets are set, trigger a deploy.
+#
+# The scraper services do NOT run here — they run on GitHub Actions — so this
+# web service does not need ANTHROPIC_API_KEY.
+services:
+  - type: web
+    name: battery-price-dashboard
+    runtime: python
+    plan: free
+    region: oregon
+    branch: main
+    autoDeploy: true
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /healthz
+    envVars:
+      # Supabase project endpoint + read key (dashboard reads via anon + RLS).
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      # Service-role key: used only by the admin approve/reject writes.
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      # Admin login password (checked at /login).
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Signs the admin session cookie; Render generates a strong value once.
+      - key: SESSION_SECRET
+        generateValue: true

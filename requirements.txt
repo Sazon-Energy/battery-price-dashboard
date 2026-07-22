@@ -1,0 +1,20 @@
+# Web framework (server-rendered dashboard + JSON/admin endpoints)
+flask>=3.0
+
+# Database access via Supabase (PostgREST over HTTPS) — same project as before
+supabase>=2.0
+
+# HTTP fetching for the scraper services (replaces axios)
+httpx>=0.27
+
+# HTML parsing for price/spec extraction (replaces cheerio); bundles soupsieve
+beautifulsoup4>=4.12
+
+# LLM extraction fallback (replaces @anthropic-ai/sdk)
+anthropic>=0.40
+
+# Loads .env.local during local development (replaces dotenv)
+python-dotenv>=1.0
+
+# Production WSGI server on Render
+gunicorn>=22.0

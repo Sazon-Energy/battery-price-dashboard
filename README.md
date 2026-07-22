@@ -2,27 +2,30 @@
 
 Automated price tracking and discovery for consumer battery products (power stations, solar generators, home backup systems).
 
+Python stack: a **Flask** web dashboard, **Supabase** (PostgreSQL) for storage, and scheduled **GitHub Actions** that run Python scraper services to keep the database current.
+
 ## Architecture
 
 ### System Components
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      Next.js Frontend                        │
-│  • Main dashboard (public price tracking)                    │
-│  • /candidates page (admin-only candidate review)            │
+│                    Flask Web App (Render)                    │
+│  • Main dashboard (server-rendered price tables)             │
+│  • /candidates (admin-only review, session login)            │
 └─────────────────┬───────────────────────────────────────────┘
                   │
-                  ├── Read: Supabase (anon key, RLS-protected)
-                  └── Write: API Routes (service role key)
+                  ├── Read:  Supabase (anon key, RLS-protected)
+                  └── Write: admin approve/reject (service role key)
                           │
                           ▼
             ┌─────────────────────────────┐
             │   Supabase PostgreSQL       │
             │  • batteries                │
+            │  • battery_classes          │
             │  • price_history            │
-            │  • battery_candidates       │
             │  • manufacturers            │
+            │  • battery_candidates       │
             │  • price_extraction_failures│
             └─────────────────────────────┘
                           ▲
@@ -30,26 +33,31 @@ Automated price tracking and discovery for consumer battery products (power stat
             ┌─────────────┴──────────────┐
             │                            │
     ┌───────┴────────┐       ┌──────────┴─────────┐
-    │ Price Scraper  │       │ Discovery Service  │
+    │ Price Updater  │       │ Discovery Service  │
     │ (GitHub Action)│       │ (GitHub Action)    │
-    │ 2x/week        │       │ Weekly             │
+    │ Sun & Wed      │       │ Mondays            │
     └────────────────┘       └────────────────────┘
 ```
 
 **Data Flow:**
 
-1. **Discovery** (weekly): Crawls manufacturer sites → extracts specs + price → creates `battery_candidates` (pending review)
-2. **Review** (manual): Admin approves candidate via `/candidates` UI → creates `batteries` row + seeds `price_history`
-3. **Price Tracking** (2x/week): Scrapes approved batteries → updates `current_price` + inserts `price_history` row
-4. **Dashboard** (real-time): Displays batteries with current prices and historical data
+1. **Discovery** (weekly): Crawls manufacturer sites → extracts specs + price → creates `battery_candidates` (pending review).
+2. **Review** (manual): Admin approves a candidate via `/candidates` → creates a `batteries` row + seeds `price_history`.
+3. **Price Tracking** (Sun & Wed): Scrapes approved batteries → updates `current_price` + inserts a `price_history` row.
+4. **Dashboard**: Server-renders batteries with current prices and historical data.
 
-### Key Design Decisions
+### Technology
 
-- **Manufacturer-focused discovery**: Curated list of known battery manufacturers (not web-wide crawling)
-- **Price-gated candidates**: Only create candidates when price extraction succeeds; log failures separately
-- **Manual approval only**: Prioritize data quality; specs can be corrected during approval
-- **Separation of concerns**: Discovery finds products; existing scraper handles price tracking
-- **Security layers**: RLS on tables + admin token on write endpoints + service role isolation
+| Concern | Library / service |
+|---|---|
+| Web framework | Flask + Jinja2 (server-rendered) |
+| Production server | gunicorn on Render |
+| Database access | `supabase` (supabase-py, PostgREST over HTTPS) |
+| HTTP scraping | `httpx` |
+| HTML parsing | `beautifulsoup4` |
+| LLM fallback extraction | `anthropic` (Claude Haiku 4.5) |
+| Config / secrets | `python-dotenv` (local), env vars (CI / Render) |
+| Scheduling | GitHub Actions cron |
 
 ---
 
@@ -57,149 +65,116 @@ Automated price tracking and discovery for consumer battery products (power stat
 
 ### Prerequisites
 
-- Node.js 18+ and npm
-- Supabase account (free tier is sufficient)
+- Python 3.11+ (CI and Render use 3.12; the code also runs on 3.9)
+- A Supabase project (free tier is sufficient)
 - Git
 
-### 1. Clone and Install
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/Sazon-Energy/battery-price-dashboard.git
 cd battery-price-dashboard
-npm install
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### 2. Database Setup
+### 2. Database setup
 
-#### Create Supabase Project
+Create a Supabase project, then run the SQL files in `migrations/` **in order** via the Supabase SQL Editor (see `migrations/README.md`). The three core tables (`batteries`, `battery_classes`, `price_history`) were originally created in the Supabase Studio table editor; their current shape is documented in [DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md).
 
-1. Go to [supabase.com](https://supabase.com) and create a new project
-2. Wait for provisioning (~2 minutes)
-3. Note your project URL and API keys (Settings → API):
-   - **Project URL**: `https://xxx.supabase.co`
-   - **anon public** key: `eyJhbGci...` (safe for client-side)
-   - **service_role secret** key: `eyJhbGci...` (server-side only, full admin access)
+Expected tables: `batteries`, `battery_classes`, `price_history`, `manufacturers`, `battery_candidates`, `price_extraction_failures`.
 
-#### Run Migrations
-
-Go to Supabase SQL Editor and run these files **in order**:
-
-1. `migrations/001_create_manufacturers_table.sql`
-2. `migrations/002_create_battery_candidates_table.sql`
-3. `migrations/004_update_batteries_table.sql`
-4. `migrations/005_remove_cross_references.sql`
-5. `migrations/006_add_scrape_verified.sql`
-6. `migrations/007_create_price_extraction_failures.sql`
-
-Verify tables exist: `batteries`, `battery_classes`, `price_history`, `manufacturers`, `battery_candidates`, `price_extraction_failures`
-
-### 3. Environment Variables
+### 3. Environment variables
 
 Create `.env.local` in the project root:
 
 ```bash
-# Supabase Connection (from Settings → API)
+# Supabase (Settings -> API). Names keep the NEXT_PUBLIC_ prefix from the
+# previous stack so existing secrets don't need re-entering; SUPABASE_URL also works.
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...your-service-role-key
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGci...anon-key
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...service-role-key
 
-# Admin Token (generate with: openssl rand -hex 32)
-ADMIN_TOKEN=your_random_32_byte_hex_string
+# Admin login for /candidates (approve/reject)
+ADMIN_PASSWORD=choose-a-strong-password
+SESSION_SECRET=$(openssl rand -hex 32)   # signs the session cookie
+
+# Used by the scraper services only (LLM fallback). Not needed by the web app.
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-**Security Notes:**
+| Variable | Used by | Purpose |
+|----------|---------|---------|
+| `NEXT_PUBLIC_SUPABASE_URL` (or `SUPABASE_URL`) | web + services | Supabase project endpoint |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | web reads + price updater | Read-only access (RLS) |
+| `SUPABASE_SERVICE_ROLE_KEY` | web admin writes + services | Bypasses RLS (server/CI only) |
+| `ADMIN_PASSWORD` | web | Password for the admin login |
+| `SESSION_SECRET` | web | Signs the admin session cookie |
+| `ANTHROPIC_API_KEY` | services only | LLM extraction fallback |
 
-| Variable | Used By | Exposure | Purpose |
-|----------|---------|----------|---------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Browser, Server | Public | Supabase project endpoint |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser | Public (safe) | Read-only access with RLS |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server only | Secret | Bypass RLS for admin operations |
-| `ADMIN_TOKEN` | Server only | Secret | Protect approve/reject endpoints |
+`.env.local` is gitignored. `DATABASE_URL` may also be present for manual `psql` migration runs but is not used by the application code.
 
-- `NEXT_PUBLIC_*` vars are embedded in browser JS bundle (safe for anon key due to RLS)
-- Service role key is **never** sent to browser, only used in API routes and scripts
-- Admin token is sent in `X-Admin-Token` header from browser but validated server-side
-
-### 4. Start Development Server
+### 4. Run the web app
 
 ```bash
-npm run dev
+flask --app batterydashboard run     # dev server on http://localhost:5000
+# or, like production:
+gunicorn wsgi:app
 ```
 
 Open:
-- **Dashboard**: http://localhost:3000
-- **Candidate Review**: http://localhost:3000/candidates
+- **Dashboard**: http://localhost:5000
+- **Candidate Review**: http://localhost:5000/candidates (prompts for the admin password)
 
 ---
 
-## Discovery System
+## Scraper Services
 
-### How It Works
+Both services are run by GitHub Actions on a schedule, and can be run locally from the repo root.
 
-1. **Crawl**: Visit manufacturer catalog pages (configured in `manufacturers` table)
-2. **Filter**: Use include/exclude keywords to identify battery products
-3. **Extract**: Parse capacity (kWh), power (W), and **price** from product page
-4. **Validate**: If price found → create candidate; if not → log to `price_extraction_failures`
-5. **Dedupe**: Skip URLs already in `battery_candidates` or `batteries` tables
+### Price updater — `services/update_all_prices.py`
 
-### Running Discovery Locally
+Scrapes every tracked battery, updates `current_price`, and appends a `price_history` row.
 
 ```bash
-node scripts/discover-batteries.js
+python -m services.update_all_prices          # refresh all batteries
+python -m services.update_all_prices <id>     # refresh a single battery
 ```
 
-**Requirements:**
-- `.env.local` must have `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`
-- At least one manufacturer with `enabled=true` AND `scrape_verified=true`
+- Schedule: `.github/workflows/update-battery-prices.yml` — Sundays & Wednesdays, 06:00 UTC.
+- Individual dead-URL failures are logged to `price_extraction_failures` and tolerated; the run only exits non-zero when nothing succeeds.
 
-**Output:**
-- Candidates inserted into `battery_candidates` table (status: `pending`)
-- Failures logged to `price_extraction_failures` table
-- Console shows progress and summary
+### Discovery — `services/discover_batteries.py`
 
-### Automated Schedule
+Crawls one enabled + `scrape_verified` manufacturer per run, extracts specs + price, and inserts pending `battery_candidates`.
 
-GitHub Actions workflow (`.github/workflows/discover-batteries.yml`):
-- **Schedule**: Every Monday at 7:00 AM UTC
-- **Manual trigger**: GitHub → Actions → "Discover Battery Candidates" → Run workflow
-- **Timeout**: 10 minutes
-- **Config**: `config/discovery-config.json` (max candidates, crawl delays, etc.)
+```bash
+python -m services.discover_batteries
+```
 
-### Adding New Manufacturers
+- Schedule: `.github/workflows/discover-batteries.yml` — Mondays, 07:00 UTC.
+- Manual trigger: GitHub → Actions → the workflow → "Run workflow".
+- Config: `config/discovery-config.json` (max candidates, crawl delays, LLM budget, etc.).
 
-1. Insert row into `manufacturers` table with catalog URL and filter keywords
-2. Set `enabled=true` but `scrape_verified=false`
-3. Test manually: `node scripts/discover-batteries.js` (won't process unverified)
-4. Verify price extraction works on their product pages
-5. Set `scrape_verified=true` to enable in production runs
+### Adding new manufacturers
+
+1. Insert a row into `manufacturers` with the catalog URL and filter keywords.
+2. Set `enabled=true` but `scrape_verified=false`.
+3. Test locally: `python -m services.discover_batteries` (won't process unverified manufacturers).
+4. Once price extraction is confirmed on their pages, set `scrape_verified=true`.
 
 ---
 
 ## Candidate Review & Approval
 
-### Access the Admin UI
+1. Navigate to `/candidates` and log in with `ADMIN_PASSWORD` (the page is not linked from the main UI).
+2. **Approve** inserts a new `batteries` row (`current_price = discovered_price`), seeds `price_history`, and marks the candidate `approved`. Battery class is left unset.
+3. **Reject** marks the candidate `rejected`.
 
-1. Navigate to `/candidates` (not linked from main UI)
-2. On first approve/reject, you'll be prompted for the admin token
-3. Token is cached in `sessionStorage` (cleared when tab closes)
+See [CANDIDATE_REVIEW_GUIDE.md](./CANDIDATE_REVIEW_GUIDE.md).
 
-### Approve a Candidate
-
-Click **Approve** button:
-1. Creates row in `batteries` table with `current_price = discovered_price`
-2. Seeds `price_history` with the discovered price
-3. Marks candidate as `status='approved'`
-4. Battery class is left NULL (backfill later if needed)
-
-### Reject a Candidate
-
-Click **Reject** button:
-1. Marks candidate as `status='rejected'`
-2. No reason prompt (rejection_reason column unused for now)
-
-### Review Price Extraction Failures
-
-Products that passed filters but had no extractable price:
+Products that pass filters but have no extractable price are logged to `price_extraction_failures` rather than becoming candidates:
 
 ```sql
 SELECT product_name, url, manufacturer_id, attempted_at
@@ -208,97 +183,44 @@ ORDER BY attempted_at DESC
 LIMIT 50;
 ```
 
-Fix the scraper for that manufacturer or manually add the battery.
-
 ---
 
-## Deployment to Vercel
+## Deployment to Render
 
-### Initial Setup
+The web app deploys to Render as a Python web service (defined in `render.yaml`). The scraper services keep running on GitHub Actions — they are not part of the web host.
 
-1. **Connect Repository**:
-   - Go to [vercel.com](https://vercel.com) → Add New Project
-   - Import `Sazon-Energy/battery-price-dashboard`
-   - Framework Preset: Next.js (auto-detected)
-   - Deploy
+### Initial setup
 
-2. **Add Environment Variables**:
-   - Go to Project Settings → Environment Variables
-   - Add all four variables from `.env.local` (see below)
-   - Select: Production, Preview, Development
+1. Push this repository to GitHub.
+2. Render dashboard → **New +** → **Blueprint** → connect the repository. Render reads `render.yaml` and creates the web service:
+   - Build: `pip install -r requirements.txt`
+   - Start: `gunicorn wsgi:app --bind 0.0.0.0:$PORT`
+   - Health check: `/healthz`
+3. Set the secret env vars in the Render dashboard (`sync: false` in the blueprint): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_PASSWORD`. `SESSION_SECRET` is generated by Render automatically.
+4. Trigger a deploy.
 
-3. **Redeploy**:
-   - After adding env vars, trigger a redeploy
-   - Deployments tab → latest deployment → ⋯ → Redeploy
+**Auto-deploy:** with `autoDeploy: true`, pushing to `main` redeploys the service.
 
-### Environment Variables in Vercel
+**Note on the free tier:** the service sleeps after ~15 minutes of inactivity and cold-starts on the next request. Because reads go to Supabase over HTTPS (PostgREST, stateless), there is no database connection pool to manage.
 
-Add these in Vercel dashboard (Settings → Environment Variables):
+### GitHub Actions secrets
 
-```
-NEXT_PUBLIC_SUPABASE_URL = https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY = eyJhbGci...your-anon-key
-SUPABASE_SERVICE_ROLE_KEY = eyJhbGci...your-service-role-key
-ADMIN_TOKEN = your_random_32_byte_hex_string
-```
-
-**Security in Production:**
-
-- `NEXT_PUBLIC_*` vars are bundled into JS (safe - anon key + RLS)
-- `SUPABASE_SERVICE_ROLE_KEY` is only available to API routes (server-side)
-- `ADMIN_TOKEN` protects `/api/candidates/approve` and `/api/candidates/reject` endpoints
-- Never commit secrets to git (`.env.local` is in `.gitignore`)
-
-### Deployment Workflow
-
-**Automatic:**
-- Push to `main` branch → Vercel auto-deploys to production
-- Push to feature branch → Vercel creates preview deployment
-
-**Manual:**
-```bash
-npx vercel --prod
-```
+Set these repository secrets (Settings → Secrets and variables → Actions) — same names as before:
+`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY`.
 
 ---
 
 ## Security Architecture
 
-### Defense Layers
+1. **Row Level Security (RLS)**: the anon key can read the public tables but not modify them; the service-role key bypasses RLS for admin operations. `price_extraction_failures` has RLS enabled with no policies (service-role only).
+2. **Admin session login**: `/candidates` and the approve/reject actions require a signed session established at `/login` with `ADMIN_PASSWORD`. If `ADMIN_PASSWORD` is unset, the admin area fails closed.
+3. **Key isolation**: the service-role key and admin password live only in server/CI environments, never in the browser.
 
-1. **Row Level Security (RLS)**:
-   - Enabled on `price_extraction_failures` (admin-only table)
-   - Anon key can read batteries/price_history but not modify
-   - Service role bypasses RLS for admin operations
-
-2. **Admin Token Protection**:
-   - `/api/candidates/approve` and `/api/candidates/reject` require `X-Admin-Token` header
-   - Token validated server-side against `process.env.ADMIN_TOKEN`
-   - Invalid token → 401 Unauthorized
-
-3. **Key Isolation**:
-   - Browser gets anon key (read-only via RLS)
-   - Server-side code uses service role key (full access, never exposed to browser)
-   - Admin token stored in browser sessionStorage (prompt once per session)
-
-4. **No Public Write Access**:
-   - All database writes go through authenticated API routes
-   - Discovery and price scraping use service role key
-   - No direct database modification from client
-
-### Secret Management
-
-| Environment | Storage | Access |
-|-------------|---------|--------|
-| Local Dev | `.env.local` (gitignored) | Developer only |
-| Vercel Production | Environment Variables (encrypted) | Build + runtime only |
-| GitHub Actions | Repository Secrets | Workflow runs only |
-
-**Never:**
-- Commit `.env.local` to git
-- Expose service role key to browser
-- Share admin token publicly
-- Use production keys in local development (use same Supabase instance but protect via token)
+| Environment | Secret storage |
+|-------------|----------------|
+| Local dev | `.env.local` (gitignored) |
+| Render (web) | Service environment variables |
+| GitHub Actions (services) | Repository secrets |
 
 ---
 
@@ -306,131 +228,59 @@ npx vercel --prod
 
 ```
 battery-price-dashboard/
-├── app/                          # Next.js App Router
-│   ├── page.js                   # Main dashboard (batteries + price history)
-│   ├── candidates/page.js        # Admin UI for candidate review
-│   └── api/
-│       └── candidates/
-│           ├── approve/route.js  # POST endpoint (admin token required)
-│           └── reject/route.js   # POST endpoint (admin token required)
-├── lib/
-│   ├── supabase.js               # Browser-side client (anon key)
-│   ├── supabase-admin.js         # Server-side client (service role key)
-│   ├── admin-auth.js             # Admin token validation helper
-│   ├── price-extractor.js        # Shared price extraction logic (5 methods)
-│   ├── battery-crawler.js        # URL discovery + content filtering
-│   ├── spec-extractor.js         # Capacity/power parsing
-│   └── battery-classifier.js     # Match specs to battery classes
-├── scripts/
-│   ├── discover-batteries.js     # Discovery service (run by GitHub Action)
-│   └── scrape-battery.js         # Price scraper (run by GitHub Action)
-├── migrations/                   # Supabase SQL migration files (run manually)
-├── config/
-│   └── discovery-config.json     # Discovery settings (max candidates, delays, etc.)
-├── .github/workflows/
-│   ├── discover-batteries.yml    # Weekly discovery automation
-│   └── update-battery-prices.yml # Twice-weekly price scraping
-└── .env.local                    # Local environment variables (gitignored)
+├── wsgi.py                          # gunicorn entrypoint (app = create_app())
+├── requirements.txt
+├── render.yaml                      # Render Blueprint (web service)
+├── .python-version                  # 3.12
+├── batterydashboard/                # Flask application package
+│   ├── __init__.py                  # create_app() factory
+│   ├── config.py                    # env-var loading
+│   ├── database.py                  # supabase-py clients (anon + service role)
+│   ├── admin_auth.py                # session login guard
+│   ├── http_client.py               # httpx GET helper
+│   ├── timeutil.py                  # ISO timestamp helper
+│   ├── discovery_config.py          # loads config/discovery-config.json
+│   ├── routes/
+│   │   ├── dashboard.py             # GET /
+│   │   ├── api.py                   # GET /api/price-history
+│   │   └── admin.py                 # /login, /logout, /candidates, approve, reject
+│   ├── extraction/
+│   │   ├── price_extractor.py       # deterministic price extraction (5 methods)
+│   │   ├── spec_extractor.py        # capacity / power / name extraction
+│   │   ├── llm_extractor.py         # Claude Haiku fallback
+│   │   └── failure_logger.py        # normalize_url + failure logging
+│   ├── templates/                   # base, dashboard, candidates, login
+│   └── static/                      # style.css, modal.js
+├── services/                        # scheduled scrapers (run by GitHub Actions)
+│   ├── update_all_prices.py
+│   ├── scrape_battery.py
+│   └── discover_batteries.py
+├── config/discovery-config.json
+├── migrations/                      # Supabase SQL migrations
+├── tests/                           # price-extractor regression check + fixtures
+└── .github/workflows/               # discover-batteries.yml, update-battery-prices.yml
 ```
 
 ---
 
-## Common Tasks
-
-### Add a Battery Manually
-
-```sql
-INSERT INTO batteries (name, target_url, supplier, current_price)
-VALUES ('Anker 767', 'https://us.anker.com/products/a1770', 'Anker', 2399.00);
-```
-
-### View Recent Price Changes
-
-```sql
-SELECT b.name, ph.price, ph.scraped_at
-FROM price_history ph
-JOIN batteries b ON b.id = ph.battery_id
-WHERE ph.scraped_at > NOW() - INTERVAL '7 days'
-ORDER BY ph.scraped_at DESC;
-```
-
-### Check Discovery Status
-
-```sql
-SELECT name, last_searched_at, last_products_found, enabled, scrape_verified
-FROM manufacturers
-ORDER BY last_searched_at DESC;
-```
-
-### Force Rediscovery for a Manufacturer
-
-```sql
-UPDATE manufacturers
-SET last_searched_at = NULL
-WHERE name = 'Anker';
-```
-
-Then run discovery manually or wait for next scheduled run.
-
----
-
-## Troubleshooting
-
-### "Invalid API key" Error
-
-- Verify `NEXT_PUBLIC_SUPABASE_ANON_KEY` is correct in `.env.local`
-- Restart dev server after changing `.env.local`
-- Check Supabase dashboard → Settings → API for correct key
-
-### Admin Token Keeps Prompting
-
-- Clear browser sessionStorage (DevTools → Application → Session Storage)
-- Verify `ADMIN_TOKEN` in `.env.local` matches what you're entering
-- Check for extra spaces or quotes around the token value
-
-### Discovery Finds No Candidates
-
-- Check `manufacturers` table: ensure `enabled=true` AND `scrape_verified=true`
-- Run locally with console output: `node scripts/discover-batteries.js`
-- Check `price_extraction_failures` table for products that failed price extraction
-- Verify manufacturer's catalog URL still works (sites change structure)
-
-### Next.js Dev Server Slow to Start
+## Tests
 
 ```bash
-rm -rf .next
-npm run dev
+python tests/parity_check.py
 ```
 
-### Vercel Deployment Fails
-
-- Check build logs in Vercel dashboard
-- Verify all environment variables are set
-- Ensure migrations have been run in Supabase
-- Check that `NEXT_PUBLIC_SUPABASE_URL` and keys are correct
+Checks the price extractor against `tests/fixtures/golden.json` — a snapshot captured from the original implementation covering all five extraction methods plus edge cases.
 
 ---
 
 ## Additional Documentation
 
-- **[DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md)**: Complete table reference with all columns and relationships
-- **[PROJECT_ROADMAP.md](./PROJECT_ROADMAP.md)**: Development phases, status, and future enhancements
-- **[CANDIDATE_REVIEW_GUIDE.md](./CANDIDATE_REVIEW_GUIDE.md)**: Detailed review workflow and SQL examples
-- **[migrations/README.md](./migrations/README.md)**: Migration history and manual execution instructions
-
----
-
-## Contributing
-
-This is a personal project for tracking battery prices. The manufacturer list and filter keywords are tuned for consumer backup power products (1kWh+). 
-
-If forking:
-1. Create your own Supabase project
-2. Update manufacturer list and keywords for your use case
-3. Adjust discovery config (`config/discovery-config.json`) for your rate limits
-
----
+- **[DATABASE_SCHEMA.md](./DATABASE_SCHEMA.md)**: table reference.
+- **[PROJECT_ROADMAP.md](./PROJECT_ROADMAP.md)**: development phases and history.
+- **[CANDIDATE_REVIEW_GUIDE.md](./CANDIDATE_REVIEW_GUIDE.md)**: review workflow.
+- **[DEPLOY.md](./DEPLOY.md)**: deployment quick reference.
+- **[migrations/README.md](./migrations/README.md)**: migration history and instructions.
 
 ## License
 
-MIT License - See LICENSE file for details
+MIT License - See LICENSE file for details.

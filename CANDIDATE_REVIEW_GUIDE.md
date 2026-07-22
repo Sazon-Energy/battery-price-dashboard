@@ -5,19 +5,19 @@ The discovery script finds new battery products on verified manufacturer sites a
 
 ## Setup
 
-### 1. Set the admin token
-Generate a strong token and add it to `.env.local` (and to your hosting environment, e.g. Vercel):
+### 1. Set the admin password
+Add an admin password and a session secret to `.env.local` (and to your hosting environment, e.g. Render):
 
 ```bash
-openssl rand -hex 32
-# Add the output to .env.local:
-ADMIN_TOKEN=<generated-token>
+# Add to .env.local:
+ADMIN_PASSWORD=<choose-a-strong-password>
+SESSION_SECRET=$(openssl rand -hex 32)   # signs the session cookie
 ```
 
-The token is required by the approve/reject API routes. Without it those endpoints return 401.
+The password gates the `/candidates` page and the approve/reject actions. If `ADMIN_PASSWORD` is unset, the admin area fails closed.
 
 ### 2. Open the admin page
-Navigate to `/candidates` (the page is intentionally not linked from the main UI). When you take an action, the page will prompt for the admin token once and cache it in `sessionStorage` for the rest of the browser session.
+Navigate to `/candidates` (the page is intentionally not linked from the main UI). You'll be redirected to `/login`; enter the admin password to start a session for the rest of the browser session.
 
 ## Reviewing Candidates
 
@@ -32,7 +32,7 @@ For each pending row you'll see:
 
 **Approve** inserts a new row into `batteries` (with `current_price = discovered_price`), seeds the first `price_history` row, and marks the candidate as `approved`. Battery class is left unset and can be backfilled later.
 
-**Reject** prompts for an optional reason and marks the candidate as `rejected`.
+**Reject** marks the candidate as `rejected`.
 
 ## Discovery Failures
 

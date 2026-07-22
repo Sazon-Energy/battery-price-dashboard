@@ -9,20 +9,20 @@ on:
 jobs:
   update-prices:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
       with:
-        node-version: '20'
-        cache: 'npm'
-        
+        python-version: '3.12'
+        cache: 'pip'
+
     - name: Install dependencies
-      run: npm install
-      
+      run: pip install -r requirements.txt
+
     - name: Update all battery prices
       id: update_prices
       env:
@@ -30,12 +30,12 @@ jobs:
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
         SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      run: node scripts/update-all-prices.js
-      
+      run: python -m services.update_all_prices
+
     - name: Log completion on success
       if: success()
       run: echo "✅ Battery price update completed successfully at $(date)"
-      
+
     # claude suggest slack but I'm not setting it up for now. Will just leave it commented out
     # Slack notification on failure (optional - requires SLACK_WEBHOOK secret)
     # - name: Notify Slack on failure
@@ -47,7 +47,7 @@ jobs:
     #     text: '❌ Battery price update failed! Check the GitHub Actions logs for details.'
     #   env:
     #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-    
+
     # Email notification on failure (using GitHub's built-in notifications)
     - name: Log failure details
       if: failure()

@@ -1,0 +1,11 @@
+[
+  { "file": "jsonld.html",       "url": "https://example.com/products/a" },
+  { "file": "meta.html",         "url": "https://example.com/products/b" },
+  { "file": "dataattr.html",     "url": "https://example.com/products/c" },
+  { "file": "css_money.html",    "url": "https://example.com/products/d" },
+  { "file": "css_sale.html",     "url": "https://example.com/products/e" },
+  { "file": "inline_sale.html",  "url": "https://example.com/products/f" },
+  { "file": "inline_cents.html", "url": "https://example.com/products/g" },
+  { "file": "variant.html",      "url": "https://shop.example.com/products/h?variant=44556677" },
+  { "file": "none.html",         "url": "https://example.com/products/i" }
+]

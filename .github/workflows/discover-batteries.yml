@@ -14,14 +14,14 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - name: Setup Python
+      uses: actions/setup-python@v5
       with:
-        node-version: '20'
-        cache: 'npm'
+        python-version: '3.12'
+        cache: 'pip'
 
     - name: Install dependencies
-      run: npm install
+      run: pip install -r requirements.txt
 
     - name: Discover new battery candidates
       id: discover
@@ -29,7 +29,7 @@ jobs:
         NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
         SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      run: node scripts/discover-batteries.js
+      run: python -m services.discover_batteries
 
     - name: Log completion on success
       if: success()
