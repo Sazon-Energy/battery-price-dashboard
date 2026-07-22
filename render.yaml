@@ -1,11 +1,10 @@
 # Render Blueprint — https://render.com/docs/blueprint-spec
 #
-# First deploy:
-#   1. Push this branch to GitHub.
-#   2. Render dashboard -> New + -> Blueprint -> connect this repository.
-#   3. Render creates the web service from this file. Set the `sync: false`
+# Deploy:
+#   1. Render dashboard -> New + -> Blueprint -> connect this repository.
+#   2. Render creates the web service from this file. Set the `sync: false`
 #      secrets below in the dashboard (they are intentionally not stored here).
-#   4. After the secrets are set, trigger a deploy.
+#   3. After the secrets are set, trigger a deploy.
 #
 # The scraper services do NOT run here — they run on GitHub Actions — so this
 # web service does not need ANTHROPIC_API_KEY.
@@ -15,8 +14,7 @@ services:
     runtime: python
     plan: free
     region: oregon
-    # Test deploy runs from the migration branch; switch to `main` at cutover.
-    branch: node-to-python
+    branch: main
     autoDeploy: true
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT
