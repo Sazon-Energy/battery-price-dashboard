@@ -15,7 +15,8 @@ services:
     runtime: python
     plan: free
     region: oregon
-    branch: main
+    # Test deploy runs from the migration branch; switch to `main` at cutover.
+    branch: node-to-python
     autoDeploy: true
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn wsgi:app --bind 0.0.0.0:$PORT
