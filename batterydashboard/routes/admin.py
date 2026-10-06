@@ -11,6 +11,7 @@ from datetime import timezone
 from flask import (
     Blueprint,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -19,6 +20,7 @@ from flask import (
 )
 
 from ..admin_auth import check_admin_password, login_required
+from ..class_suggestion import suggest_class, suggest_new_class_values, summarize_specs
 from ..database import get_supabase, get_supabase_admin
 from ..timeutil import now_iso, parse_iso
 
@@ -264,13 +266,21 @@ def reject():
 # --- battery class assignment ---
 
 
+CLASS_NAME_MAXIMUM_LENGTH = 200  # matches the battery_classes_short_name_length CHECK
+CLASS_COLUMNS = "id, short_name, capacity_kwh, continuous_power_w, peak_power_w, surge_power_w"
+
+
 @admin_blueprint.get("/classes")
 @login_required
 def classes():
     supabase = get_supabase()
 
     battery_classes = (
-        supabase.table("battery_classes").select("id, short_name").order("short_name").execute().data
+        supabase.table("battery_classes")
+        .select(CLASS_COLUMNS)
+        .order("short_name")
+        .execute()
+        .data
     ) or []
     batteries = (
         supabase.table("batteries")
@@ -294,12 +304,15 @@ def classes():
     ]
     unclassified_batteries.sort(key=lambda battery: (battery.get("name") or "").casefold())
 
-    class_groups = [{"id": None, "title": "Unclassified", "batteries": unclassified_batteries}]
+    class_groups = [
+        {"id": None, "title": "Unclassified", "battery_class": None, "batteries": unclassified_batteries}
+    ]
     for battery_class in battery_classes:
         class_groups.append(
             {
                 "id": battery_class["id"],
                 "title": battery_class["short_name"],
+                "battery_class": battery_class,
                 "batteries": batteries_by_class_id.get(battery_class["id"], []),
             }
         )
@@ -311,6 +324,231 @@ def classes():
         battery_count=len(batteries),
         unclassified_count=len(unclassified_batteries),
     )
+
+
+def _parse_positive_number(raw_value, field_label, errors, whole_number=False, required=True):
+    """Parse a form number; a blank optional field returns None without an error."""
+    text = (raw_value or "").strip().replace(",", "")
+    if not text:
+        if required:
+            errors.append("{} is required.".format(field_label))
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        errors.append("{} must be a number.".format(field_label))
+        return None
+    if value <= 0:
+        errors.append("{} must be greater than 0.".format(field_label))
+        return None
+    if whole_number:
+        if value != int(value):
+            errors.append("{} must be a whole number of watts.".format(field_label))
+            return None
+        return int(value)
+    return value
+
+
+def _validate_new_class(form):
+    """Validate add-class form fields. Returns ``(values, errors)``."""
+    errors = []
+
+    short_name = (form.get("short_name") or "").strip()
+    if not short_name:
+        errors.append("Name is required.")
+    elif len(short_name) > CLASS_NAME_MAXIMUM_LENGTH:
+        errors.append("Name must be {} characters or fewer.".format(CLASS_NAME_MAXIMUM_LENGTH))
+
+    capacity_kwh = _parse_positive_number(
+        form.get("capacity_kwh"), "Capacity", errors, required=False
+    )
+    continuous_power_w = _parse_positive_number(
+        form.get("continuous_power_w"), "Continuous power", errors, whole_number=True
+    )
+    peak_power_w = _parse_positive_number(
+        form.get("peak_power_w"), "Peak power", errors, whole_number=True, required=False
+    )
+    surge_power_w = _parse_positive_number(
+        form.get("surge_power_w"), "Surge power", errors, whole_number=True, required=False
+    )
+    for label, power_w in (("Peak power", peak_power_w), ("Surge power", surge_power_w)):
+        if continuous_power_w and power_w and power_w < continuous_power_w:
+            errors.append("{} can't be lower than continuous power.".format(label))
+
+    values = {
+        "short_name": short_name,
+        "capacity_kwh": capacity_kwh,
+        "continuous_power_w": continuous_power_w,
+        "peak_power_w": peak_power_w,
+        "surge_power_w": surge_power_w,
+    }
+    return values, errors
+
+
+@admin_blueprint.post("/classes/apply-from-suggestion")
+@login_required
+def apply_class_from_suggestion():
+    """Apply the class chosen in a suggestion panel to the battery being reviewed.
+
+    ``class_choice`` is an existing class id, or ``"new"`` to create a class
+    from the submitted fields and apply it in one step. Submitted in the
+    background: on errors the panel is returned (status 400) with the messages
+    and entered values; on success a flash message is set and JSON names the
+    page to reload.
+    """
+    battery_id = request.form.get("battery_id")
+    class_choice = request.form.get("class_choice")
+    if not battery_id or not class_choice:
+        return "battery_id and class_choice required", 400
+
+    supabase = get_supabase()
+    admin = get_supabase_admin()
+    try:
+        battery_rows = (
+            supabase.table("batteries")
+            .select("id, name, battery_class_id")
+            .eq("id", battery_id)
+            .limit(1)
+            .execute()
+            .data
+        ) or []
+        if not battery_rows:
+            return "Battery not found", 404
+        battery = battery_rows[0]
+
+        battery_classes = (
+            supabase.table("battery_classes")
+            .select(CLASS_COLUMNS)
+            .order("short_name")
+            .execute()
+            .data
+        ) or []
+    except Exception as error:  # noqa: BLE001 - shown as plain text in the panel
+        return "Could not apply the class: {}".format(error), 500
+
+    def render_panel_with_errors(error_messages):
+        return (
+            render_template(
+                "class_suggestion_panel.html",
+                battery=battery,
+                class_suggestion=_build_class_suggestion(supabase, battery_id, battery_classes),
+                new_class_form=request.form,
+                new_class_errors=error_messages,
+            ),
+            400,
+        )
+
+    if class_choice == "new":
+        new_class_values, errors = _validate_new_class(request.form)
+        short_name = new_class_values["short_name"]
+        if short_name:
+            for existing_class in battery_classes:
+                if (existing_class["short_name"] or "").casefold() == short_name.casefold():
+                    errors.append(
+                        'A class named "{}" already exists; choose it from the list instead.'.format(
+                            existing_class["short_name"]
+                        )
+                    )
+                    break
+        if errors:
+            return render_panel_with_errors(errors)
+
+        try:
+            inserted = admin.table("battery_classes").insert(new_class_values).execute().data
+        except Exception as error:  # noqa: BLE001
+            return render_panel_with_errors(["Failed to add class: {}".format(error)])
+        if not inserted:
+            return render_panel_with_errors(["Failed to add class."])
+        class_id, class_name = inserted[0]["id"], short_name
+        success_message = 'Added class "{}" and applied it to "{}"'.format(class_name, battery["name"])
+    else:
+        chosen_class = next(
+            (battery_class for battery_class in battery_classes if battery_class["id"] == class_choice), None
+        )
+        if chosen_class is None:
+            return render_panel_with_errors(["That class no longer exists."])
+        class_id, class_name = chosen_class["id"], chosen_class["short_name"]
+        success_message = 'Moved "{}" to {}'.format(battery["name"], class_name)
+
+    try:
+        admin.table("batteries").update({"battery_class_id": class_id}).eq("id", battery_id).execute()
+        flash(success_message, "success")
+    except Exception as error:  # noqa: BLE001
+        flash('Could not apply "{}" to "{}": {}'.format(class_name, battery["name"], error), "error")
+
+    return jsonify(redirect_url=url_for("admin.classes", _anchor="battery-{}".format(battery_id)))
+
+
+@admin_blueprint.get("/classes/suggestion")
+@login_required
+def class_suggestion():
+    """Return the suggestion panel (an HTML fragment) for one battery.
+
+    Fetched in the background by ``class_suggestion.js`` when an admin clicks
+    "Suggest class"; only that one battery's stored specs are read.
+    """
+    battery_id = request.args.get("battery_id")
+    if not battery_id:
+        return "battery_id required", 400
+
+    supabase = get_supabase()
+    try:
+        battery_rows = (
+            supabase.table("batteries")
+            .select("id, name, battery_class_id")
+            .eq("id", battery_id)
+            .limit(1)
+            .execute()
+            .data
+        ) or []
+        if not battery_rows:
+            return "Battery not found", 404
+
+        battery_classes = (
+            supabase.table("battery_classes")
+            .select(CLASS_COLUMNS)
+            .order("short_name")
+            .execute()
+            .data
+        ) or []
+        suggestion = _build_class_suggestion(supabase, battery_id, battery_classes)
+    except Exception as error:  # noqa: BLE001 - shown as plain text in the panel
+        return "Could not load a suggestion: {}".format(error), 500
+
+    return render_template(
+        "class_suggestion_panel.html",
+        battery=battery_rows[0],
+        class_suggestion=suggestion,
+        new_class_form=None,
+        new_class_errors=[],
+    )
+
+
+def _build_class_suggestion(supabase, battery_id, battery_classes):
+    """Look up one battery's stored specs and suggest a class for it."""
+    candidate_rows = (
+        supabase.table("battery_candidates")
+        .select("extracted_specs")
+        .eq("battery_id", battery_id)
+        .order("reviewed_at", desc=True, nullsfirst=False)
+        .limit(1)
+        .execute()
+        .data
+    ) or []
+    spec_summary = summarize_specs(candidate_rows[0].get("extracted_specs")) if candidate_rows else None
+    if spec_summary is None or not spec_summary["has_any_spec"]:
+        return {
+            "spec_summary": None,
+            "suggestion": None,
+            "new_class_defaults": suggest_new_class_values(None),
+            "battery_classes": battery_classes,
+        }
+    return {
+        "battery_classes": battery_classes,
+        "spec_summary": spec_summary,
+        "suggestion": suggest_class(spec_summary, battery_classes),
+        "new_class_defaults": suggest_new_class_values(spec_summary),
+    }
 
 
 @admin_blueprint.post("/classes/assign")

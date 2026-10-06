@@ -1,0 +1,187 @@
+{# One battery's class suggestion: a full-width row that class_suggestion.js inserts under it on the classes page. #}
+{% set spec_summary = class_suggestion.spec_summary %}
+{% set suggestion = class_suggestion.suggestion %}
+<tr class="suggestion-row">
+  <td colspan="4">
+    <div class="suggestion-panel">
+      {% if not spec_summary %}
+        <p class="suggestion-empty">
+          No stored specs for this battery. It was added without going through candidate approval
+          (or before candidates were linked to batteries), so there is nothing to suggest from.
+        </p>
+      {% else %}
+        <dl class="suggestion-specs">
+          <dt>Capacity</dt>
+          <dd>
+            {% if spec_summary.capacity_kwh is not none %}
+              <strong>{{ "{:g}".format(spec_summary.capacity_kwh) }} kWh</strong>
+              {% if spec_summary.capacity_matched %}
+                <span class="suggestion-evidence">
+                  from {{ "product name" if spec_summary.capacity_source == "product_name" else "page text" }}:
+                  “{{ spec_summary.capacity_matched }}”
+                </span>
+              {% endif %}
+            {% else %}
+              <span class="suggestion-unknown">Not found</span>
+            {% endif %}
+          </dd>
+
+          <dt>Continuous power</dt>
+          <dd>
+            {% if spec_summary.continuous_power_w is not none %}
+              <strong>{{ "{:,.0f}".format(spec_summary.continuous_power_w) }} W</strong>
+              {% if spec_summary.continuous_power_matched %}
+                <span class="suggestion-evidence">“{{ spec_summary.continuous_power_matched }}”</span>
+              {% endif %}
+              {% if spec_summary.continuous_power_warning %}
+                <span class="suggestion-warning">⚠ {{ spec_summary.continuous_power_warning }} Ignored for matching.</span>
+              {% endif %}
+            {% else %}
+              <span class="suggestion-unknown">Not found</span>
+            {% endif %}
+          </dd>
+
+          {% for spec_label, spec_value, spec_matched in [
+            ("Peak power", spec_summary.peak_power_w, spec_summary.peak_power_matched),
+            ("Surge power", spec_summary.surge_power_w, spec_summary.surge_power_matched),
+          ] %}
+            <dt>{{ spec_label }}</dt>
+            <dd>
+              {% if spec_value is not none %}
+                <strong>{{ "{:,.0f}".format(spec_value) }} W</strong>
+                {% if spec_matched %}
+                  <span class="suggestion-evidence">“{{ spec_matched }}”</span>
+                {% endif %}
+              {% else %}
+                <span class="suggestion-unknown">Not found</span>
+              {% endif %}
+            </dd>
+          {% endfor %}
+        </dl>
+      {% endif %}
+
+      {% set battery_classes = class_suggestion.battery_classes %}
+      {% set suggested_existing_class = suggestion.battery_class if suggestion and suggestion.status != "no_match" else none %}
+      {% if new_class_errors or not suggested_existing_class %}
+        {% set selected_choice = "new" %}
+      {% else %}
+        {% set selected_choice = suggested_existing_class.id %}
+      {% endif %}
+      {% set form_values = new_class_form if new_class_form else class_suggestion.new_class_defaults %}
+
+      <form method="post" action="{{ url_for('admin.apply_class_from_suggestion') }}" class="class-choice-form" novalidate>
+        <input type="hidden" name="battery_id" value="{{ battery.id }}" />
+
+        <label class="class-choice">
+          <span class="class-choice-title">Class for this battery</span>
+          <select name="class_choice">
+            <option value="new" {{ "selected" if selected_choice == "new" else "" }}>
+              New class{{ " — suggested" if spec_summary and not suggested_existing_class else "" }}
+            </option>
+            {% for battery_class in battery_classes %}
+              <option value="{{ battery_class.id }}" {{ "selected" if selected_choice == battery_class.id else "" }}>
+                {{ battery_class.short_name }}
+                {%- if suggested_existing_class and battery_class.id == suggested_existing_class.id %} — suggested{% endif %}
+                {%- if battery_class.id == battery.battery_class_id %} — current{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+
+        {% if new_class_errors %}
+          <ul class="add-class-errors" role="alert">
+            {% for error in new_class_errors %}
+              <li>{{ error }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        {# One view per choice; class_suggestion.js shows the selected one. #}
+        <div class="class-choice-view" data-choice="new" {{ "hidden" if selected_choice != "new" else "" }}>
+          {% if suggestion and suggestion.status == "no_match" %}
+            <p class="class-choice-note">
+              No existing class matches.
+              {% if suggestion.nearest_class %}
+                {% set difference_percent = suggestion.nearest_class_difference_percent %}
+                Nearest by capacity: {{ suggestion.nearest_class.short_name }}
+                ({{ "{:g}".format(suggestion.nearest_class.capacity_kwh|float) }} kWh,
+                {{ difference_percent|abs }}% {{ "smaller" if difference_percent < 0 else "larger" }} than detected).
+              {% endif %}
+            </p>
+          {% endif %}
+          <p class="class-choice-note">Name and continuous power are required; leave anything unknown blank.</p>
+          <div class="add-class-fields">
+            {% for field_name, field_label, input_mode, example, is_required in [
+              ("short_name", "Name", "text", "e.g. LFP-3kWh-3600W", true),
+              ("capacity_kwh", "Capacity (kWh)", "decimal", "e.g. 3.072", false),
+              ("continuous_power_w", "Continuous power (W)", "numeric", "e.g. 3600", true),
+              ("peak_power_w", "Peak power (W)", "numeric", "e.g. 5000", false),
+              ("surge_power_w", "Surge power (W)", "numeric", "e.g. 7200", false),
+            ] %}
+              {% set field_value = form_values.get(field_name, "") %}
+              <label>
+                <span class="add-class-label">
+                  {{ field_label }}
+                  {% if is_required %}
+                    <span class="add-class-required">Required</span>
+                  {% else %}
+                    <span class="add-class-optional">Optional</span>
+                  {% endif %}
+                </span>
+                <input
+                  type="text"
+                  inputmode="{{ input_mode }}"
+                  name="{{ field_name }}"
+                  value="{{ field_value }}"
+                  placeholder="{{ example }}"
+                  autocomplete="off"
+                  {% if is_required %}aria-required="true"{% endif %}
+                />
+                {% if is_required and not field_value and not new_class_errors and spec_summary and field_name != "short_name" %}
+                  <span class="add-class-hint">No reliable value detected — enter one</span>
+                {% endif %}
+              </label>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-save">Add and Apply</button>
+        </div>
+
+        {% for battery_class in battery_classes %}
+          <div class="class-choice-view" data-choice="{{ battery_class.id }}" {{ "hidden" if selected_choice != battery_class.id else "" }}>
+            {% if suggested_existing_class and battery_class.id == suggested_existing_class.id %}
+              {% if suggestion.status == "full_match" %}
+                <p class="class-choice-note suggestion-match-full">✓ Capacity, continuous and peak power all match</p>
+              {% else %}
+                <p class="class-choice-note">
+                  ~ Matches {{ suggestion.matched_specs|join(", ") }}
+                  {%- if suggestion.mismatched_specs %}; differs on {{ suggestion.mismatched_specs|join(", ") }}{% endif %}
+                  {%- if suggestion.unknown_specs %}; unknown {{ suggestion.unknown_specs|join(", ") }}{% endif %}
+                </p>
+              {% endif %}
+            {% endif %}
+            <dl class="class-values">
+              <dt>Capacity</dt>
+              <dd>{{ "{:g}".format(battery_class.capacity_kwh|float) ~ " kWh" if battery_class.capacity_kwh is not none else "Not set" }}</dd>
+              {% for value_label, value_watts in [
+                ("Continuous power", battery_class.continuous_power_w),
+                ("Peak power", battery_class.peak_power_w),
+                ("Surge power", battery_class.surge_power_w),
+              ] %}
+                <dt>{{ value_label }}</dt>
+                <dd class="{{ 'class-value-unset' if value_watts is none else '' }}">
+                  {{ "{:,}".format(value_watts) ~ " W" if value_watts is not none else "Not set" }}
+                </dd>
+              {% endfor %}
+            </dl>
+            {% if battery_class.id == battery.battery_class_id %}
+              <button type="submit" class="btn btn-save" disabled>Apply</button>
+              <span class="class-choice-note">This battery is already in this class.</span>
+            {% else %}
+              <button type="submit" class="btn btn-save">Apply</button>
+            {% endif %}
+          </div>
+        {% endfor %}
+      </form>
+    </div>
+  </td>
+</tr>

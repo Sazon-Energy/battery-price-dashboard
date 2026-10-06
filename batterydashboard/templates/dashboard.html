@@ -15,15 +15,17 @@
             <th class="num">Capacity (kWh)</th>
             <th class="num">Continuous Power (W)</th>
             <th class="num">Peak Power (W)</th>
+            <th class="num">Surge Power (W)</th>
           </tr>
         </thead>
         <tbody>
           {% for cls in battery_classes %}
             <tr>
               <td>{{ cls.short_name }}</td>
-              <td class="num">{{ cls.capacity_kwh }}</td>
-              <td class="num">{{ "{:,}".format(cls.cpower_w) if cls.cpower_w is not none else "" }}</td>
-              <td class="num">{{ "{:,}".format(cls.ppower_w) if cls.ppower_w is not none else "" }}</td>
+              <td class="num">{{ cls.capacity_kwh if cls.capacity_kwh is not none else "—" }}</td>
+              <td class="num">{{ "{:,}".format(cls.continuous_power_w) if cls.continuous_power_w is not none else "—" }}</td>
+              <td class="num">{{ "{:,}".format(cls.peak_power_w) if cls.peak_power_w is not none else "—" }}</td>
+              <td class="num">{{ "{:,}".format(cls.surge_power_w) if cls.surge_power_w is not none else "—" }}</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -48,7 +50,7 @@
           {% for battery in batteries %}
             <tr>
               <td>
-                <a href="{{ battery.target_url }}" target="_blank" rel="noopener noreferrer">{{ battery.name }}</a>
+                <a href="{{ battery.target_url }}" target="_blank" rel="noopener noreferrer" data-highlight-key="{{ battery.id }}">{{ battery.name }}</a>
               </td>
               <td>{{ battery.supplier }}</td>
               {% set price_summary = price_history_summaries.get(battery.id) %}

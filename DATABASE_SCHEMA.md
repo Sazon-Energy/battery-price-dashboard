@@ -23,6 +23,10 @@ This document describes all tables in the battery price monitoring system. Use t
 | manufacturer_id | uuid | Foreign key to manufacturers(id), nullable - authoritative source of manufacturer identity |
 | target_url | text | Product page URL |
 | current_price | real | Most recent price in USD |
+| capacity_kwh | numeric | Capacity in kilowatt-hours, nullable (NULL = not yet recorded) |
+| continuous_power_w | integer | Continuous (rated) output in watts, nullable in the DB until backfilled; the app UI treats it as required |
+| peak_power_w | integer | Peak output in watts (sustained for seconds), nullable |
+| surge_power_w | integer | Surge output in watts (momentary, e.g. motor start), nullable |
 | battery_class_id | uuid | Foreign key to battery_classes(id), nullable - assigned by an admin on the `/classes` page (NULL = unclassified) |
 | created_at | timestamptz | When record was created |
 | updated_at | timestamptz | Last update timestamp |
@@ -47,15 +51,17 @@ This document describes all tables in the battery price monitoring system. Use t
 | Column | Type | Description |
 |--------|------|-------------|
 | id | uuid | Primary key (auto-generated) |
-| short_name | text | Display name (e.g., "3kWh / 3kW") (CHECK length <= 200) |
-| capacity_kwh | real | Battery capacity in kilowatt-hours |
-| cpower_w | integer | Continuous power output in watts |
-| ppower_w | integer | Peak power output in watts |
+| short_name | text | Display name (e.g., "3kWh / 3kW") (NOT NULL, CHECK length <= 200) |
+| capacity_kwh | numeric | Battery capacity in kilowatt-hours, nullable |
+| continuous_power_w | integer | Continuous (rated) output in watts (NOT NULL) |
+| peak_power_w | integer | Peak output in watts (sustained for seconds), nullable |
+| surge_power_w | integer | Surge output in watts (momentary, e.g. motor start), nullable |
 | created_at | timestamptz | When record was created |
 | updated_at | timestamptz | Last update timestamp |
 
 **Key Points:**
 - Defines standard battery classes for grouping similar products
+- New classes are added by an admin on the `/classes` page; only `short_name` and `continuous_power_w` are required
 - Used for filtering and comparison
 
 **Relationships:**
@@ -204,6 +210,16 @@ From migration `005_remove_cross_references.sql`:
 
 From migration `008_remove_confidence_scoring.sql`: `battery_candidates.confidence_score` and `auto_approved` were dropped - confidence-based auto-approval was never implemented; every candidate has always required manual review.
 
+### Power columns split (2026-10-06)
+
+From migration `014_power_and_capacity_columns.sql`:
+- `battery_classes.cpower_w` renamed to `continuous_power_w` (still NOT NULL)
+- `battery_classes.ppower_w` renamed to `surge_power_w` and made nullable: the hand-entered values were mostly what product pages call "surge"
+- `battery_classes.peak_power_w` added (nullable); `battery_classes.capacity_kwh` made nullable
+- `batteries` gained nullable `capacity_kwh`, `continuous_power_w`, `peak_power_w`, `surge_power_w`
+
+**Note:** the discovery extractor still stores a single `extracted_specs.peak_power_w` covering "surge", "peak", "max" and "starting" figures. The class suggestion code sorts it into peak or surge by the matched word.
+
 ### Cleanup (2026-07-04)
 
 - `migrations/009_varchar_to_text.sql` - converted `batteries.name`/`supplier` and `battery_classes.short_name` from `varchar(n)` (an accidental Supabase Studio UI default) to `text` with explicit `CHECK` length constraints.
@@ -218,7 +234,7 @@ From migration `008_remove_confidence_scoring.sql`: `battery_candidates.confiden
 
 ### Get all batteries with their class info
 ```sql
-SELECT b.*, bc.short_name as class_name, bc.capacity_kwh, bc.cpower_w
+SELECT b.*, bc.short_name as class_name, bc.capacity_kwh, bc.continuous_power_w
 FROM batteries b
 JOIN battery_classes bc ON bc.id = b.battery_class_id
 ORDER BY b.name;

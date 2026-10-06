@@ -18,6 +18,7 @@ These migrations add automated battery discovery functionality to the Battery Pr
 10. **011_drop_rejection_reason.sql** - Drops battery_candidates.rejection_reason (half-finished feature, never surfaced in the UI)
 11. **012_add_battery_candidates_battery_id.sql** - Reintroduces battery_candidates.battery_id (one direction only), set at approval time
 12. **013_add_batteries_manufacturer_id.sql** - Adds batteries.manufacturer_id FK, backfilled from the existing supplier text column
+13. **014_power_and_capacity_columns.sql** - Splits class power into continuous / peak / surge (renames cpower_w and ppower_w; only continuous stays required) and adds the same specs plus capacity to batteries (all nullable)
 
 **Note:** Discovery configuration is stored in `config/discovery-config.json` (not in database).
 

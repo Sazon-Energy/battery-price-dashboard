@@ -179,7 +179,7 @@ def index():
         ) or []
         batteries = (
             supabase.table("batteries")
-            .select("*, battery_classes ( short_name, capacity_kwh, cpower_w, ppower_w )")
+            .select("*, battery_classes ( short_name )")
             .order("name")
             .execute()
             .data

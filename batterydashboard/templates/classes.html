@@ -11,11 +11,20 @@
   </div>
 
   {% for group in class_groups %}
-    <section class="section class-group">
+    <section class="section class-group" {% if group.id %}id="class-{{ group.id }}"{% endif %}>
       <h2>
         {{ group.title }}
         <span class="class-group-count">{{ group.batteries|length }}</span>
       </h2>
+      {% if group.battery_class %}
+        {% set battery_class = group.battery_class %}
+        <p class="class-group-specs">
+          {{ "{:g}".format(battery_class.capacity_kwh|float) ~ " kWh" if battery_class.capacity_kwh is not none else "Capacity unknown" }} ·
+          {{ "{:,}".format(battery_class.continuous_power_w) }} W continuous ·
+          {{ "{:,}".format(battery_class.peak_power_w) ~ " W" if battery_class.peak_power_w is not none else "—" }} peak ·
+          {{ "{:,}".format(battery_class.surge_power_w) ~ " W" if battery_class.surge_power_w is not none else "—" }} surge
+        </p>
+      {% endif %}
 
       {% if group.batteries|length == 0 %}
         <div class="empty-box">No batteries in this class</div>
@@ -27,13 +36,14 @@
                 <th>Name</th>
                 <th>Supplier</th>
                 <th class="class-editor-column">Class</th>
+                <th class="class-editor-column">Suggestion</th>
               </tr>
             </thead>
             <tbody>
               {% for battery in group.batteries %}
                 <tr id="battery-{{ battery.id }}" class="class-row">
                   <td>
-                    <a href="{{ battery.target_url }}" target="_blank" rel="noopener noreferrer">{{ battery.name }}</a>
+                    <a href="{{ battery.target_url }}" target="_blank" rel="noopener noreferrer" data-highlight-key="{{ battery.id }}">{{ battery.name }}</a>
                   </td>
                   <td>{{ battery.supplier }}</td>
                   <td class="class-editor-column">
@@ -57,6 +67,16 @@
                       </form>
                     </details>
                   </td>
+                  <td class="class-editor-column">
+                    <button
+                      type="button"
+                      class="link-button suggestion-toggle"
+                      data-suggestion-url="{{ url_for('admin.class_suggestion', battery_id=battery.id) }}"
+                      aria-expanded="false"
+                    >
+                      Suggest class
+                    </button>
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -65,4 +85,8 @@
       {% endif %}
     </section>
   {% endfor %}
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='class_suggestion.js') }}"></script>
 {% endblock %}

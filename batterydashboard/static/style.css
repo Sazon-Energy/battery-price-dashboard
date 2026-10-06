@@ -470,6 +470,174 @@ td.price {
 .btn-save:hover {
   background: #1d4ed8;
 }
+.class-row:has(+ .suggestion-row) {
+  background: rgba(37, 99, 235, 0.06);
+}
+.suggestion-row > td {
+  background: rgba(37, 99, 235, 0.06);
+}
+.suggestion-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  padding: 0.25rem 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+.suggestion-specs {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 1rem;
+  margin: 0;
+  flex: 1 1 340px;
+}
+.suggestion-specs dt {
+  color: var(--muted);
+}
+.suggestion-specs dd {
+  margin: 0;
+}
+.suggestion-evidence {
+  color: var(--muted);
+  margin-left: 0.4rem;
+}
+.suggestion-unknown {
+  color: var(--muted);
+  font-style: italic;
+}
+.suggestion-warning {
+  display: block;
+  color: #b45309;
+}
+.suggestion-match-full {
+  color: var(--green-dark);
+}
+.suggestion-empty {
+  color: var(--muted);
+  margin: 0;
+}
+
+/* Class chooser (inside a suggestion panel) */
+.class-choice-form {
+  flex: 1 1 320px;
+}
+.class-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.6rem;
+}
+.class-choice-title {
+  font-weight: 600;
+}
+.class-choice select {
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+}
+.class-choice-note {
+  margin: 0 0 0.6rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.class-choice-view .btn + .class-choice-note {
+  margin-left: 0.5rem;
+}
+.class-values {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.2rem 1rem;
+  margin: 0 0 0.75rem;
+}
+.class-values dt {
+  color: var(--muted);
+}
+.class-values dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.btn-save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.add-class-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.add-class-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.add-class-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.add-class-required {
+  margin-left: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--danger-text);
+}
+.add-class-optional {
+  margin-left: 0.25rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+.class-values dd.class-value-unset {
+  font-weight: 400;
+  color: var(--muted);
+}
+.add-class-fields input {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+  width: 10rem;
+}
+.add-class-fields input[name="short_name"] {
+  width: 14rem;
+}
+.add-class-hint {
+  font-size: 0.75rem;
+  color: #b45309;
+}
+.add-class-errors {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem 0.5rem 1.75rem;
+  border-radius: 6px;
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: 0.85rem;
+}
+.class-group-specs {
+  margin: -0.6rem 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Last-clicked battery link (set by last_clicked.js) */
+tr.last-clicked > td {
+  background: rgba(37, 99, 235, 0.08);
+}
+.card.last-clicked {
+  border-color: var(--accent);
+}
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -593,6 +761,13 @@ td.price {
   }
   .sparkline-end {
     stroke: #2c313a;
+  }
+  .suggestion-warning,
+  .add-class-hint {
+    color: #fbbf24;
+  }
+  .suggestion-match-full {
+    color: #6fcf8a;
   }
   .flash-success {
     background: #16351f;
