@@ -20,6 +20,12 @@ RECENT_PRICE_WINDOW_DAYS = 90
 PRICE_HISTORY_PAGE_SIZE = 1000
 
 
+# TODO: This reads the entire price_history table on every dashboard load, only
+# to find each battery's first/latest scrape date and count (the sparkline needs
+# just the last 90 days). Fine at current volume, but it grows with every scrape.
+# If the dashboard slows down, add a database view (e.g. first_scraped_at,
+# last_scraped_at, record_count grouped by battery_id) and query that, limiting
+# this fetch to the recent window. That is a schema change/migration.
 def _fetch_all_price_history(supabase):
     """Return every ``price_history`` row (battery_id, price, scraped_at), newest first."""
     rows = []
