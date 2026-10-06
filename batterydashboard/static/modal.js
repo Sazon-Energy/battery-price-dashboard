@@ -1,5 +1,5 @@
 // Price-history modal for the dashboard. Fetches /api/price-history and renders
-// a table. This is the only JavaScript in the app.
+// a table.
 (function () {
   "use strict";
 

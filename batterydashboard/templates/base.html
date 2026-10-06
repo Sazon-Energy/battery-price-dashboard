@@ -10,13 +10,22 @@
     <header class="site-header">
       <a class="brand" href="{{ url_for('dashboard.index') }}">Battery Price Dashboard</a>
       <nav class="site-nav">
+        {% set admin_link_url = url_for('admin.candidates') if is_admin else url_for('admin.login') %}
+        <a
+          href="{{ admin_link_url }}"
+          class="admin-link"
+          data-tooltip="Admin tools for reviewing battery candidates and editing classes."
+        >
+          {{ "Candidates" if is_admin else "Admin" }}
+          {% if pending_candidate_count is not none %}
+            <span class="badge" aria-label="{{ pending_candidate_count }} candidates to review">{{ pending_candidate_count }}</span>
+          {% endif %}
+        </a>
         {% if is_admin %}
-          <a href="{{ url_for('admin.candidates') }}">Candidates</a>
+          <a href="{{ url_for('admin.classes') }}">Classes</a>
           <form method="post" action="{{ url_for('admin.logout') }}" class="inline-form">
             <button type="submit" class="link-button">Log out</button>
           </form>
-        {% else %}
-          <a href="{{ url_for('admin.login') }}">Admin</a>
         {% endif %}
       </nav>
     </header>
@@ -35,6 +44,7 @@
       {% block content %}{% endblock %}
     </main>
 
+    <script src="{{ url_for('static', filename='tooltip.js') }}"></script>
     {% block scripts %}{% endblock %}
   </body>
 </html>

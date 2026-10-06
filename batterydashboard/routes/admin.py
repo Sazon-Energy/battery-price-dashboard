@@ -1,4 +1,4 @@
-"""Admin area: login/logout, candidate review, approve/reject.
+"""Admin area: login/logout, candidate review, approve/reject, battery class assignment.
 
 Ports ``app/candidates/page.js`` (server-rendered) plus
 ``app/api/candidates/approve/route.js`` and ``.../reject/route.js``. The
@@ -6,7 +6,7 @@ approve/reject actions are plain HTML form POSTs guarded by a Flask session
 (``login_required``) instead of the old ``X-Admin-Token`` header.
 """
 
-from datetime import datetime, timezone
+from datetime import timezone
 
 from flask import (
     Blueprint,
@@ -20,7 +20,7 @@ from flask import (
 
 from ..admin_auth import check_admin_password, login_required
 from ..database import get_supabase, get_supabase_admin
-from ..timeutil import now_iso
+from ..timeutil import now_iso, parse_iso
 
 admin_blueprint = Blueprint("admin", __name__)
 
@@ -36,23 +36,8 @@ _DEFAULT_SORT_COLUMNS = ["manufacturer", "name", "discovered_at"]
 # --- display formatting (server-side equivalents of the old client helpers) ---
 
 
-def _parse_iso(timestamp):
-    if not timestamp:
-        return None
-    text = str(timestamp).strip()
-    if text.endswith("Z"):
-        text = text[:-1] + "+00:00"
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        try:
-            return datetime.strptime(text[:19], "%Y-%m-%dT%H:%M:%S")
-        except ValueError:
-            return None
-
-
 def _format_datetime(timestamp):
-    parsed = _parse_iso(timestamp)
+    parsed = parse_iso(timestamp)
     if parsed is None:
         return "—"
     if parsed.tzinfo is not None:
@@ -274,3 +259,101 @@ def reject():
 
     flash("Candidate rejected", "success")
     return redirect(url_for("admin.candidates"))
+
+
+# --- battery class assignment ---
+
+
+@admin_blueprint.get("/classes")
+@login_required
+def classes():
+    supabase = get_supabase()
+
+    battery_classes = (
+        supabase.table("battery_classes").select("id, short_name").order("short_name").execute().data
+    ) or []
+    batteries = (
+        supabase.table("batteries")
+        .select("id, name, supplier, target_url, battery_class_id")
+        .order("name")
+        .execute()
+        .data
+    ) or []
+
+    batteries_by_class_id = {}
+    for battery in batteries:
+        batteries_by_class_id.setdefault(battery.get("battery_class_id"), []).append(battery)
+
+    known_class_ids = {battery_class["id"] for battery_class in battery_classes}
+    # Batteries pointing at a class that no longer exists are treated as unclassified.
+    unclassified_batteries = [
+        battery
+        for class_id, class_batteries in batteries_by_class_id.items()
+        if class_id not in known_class_ids
+        for battery in class_batteries
+    ]
+    unclassified_batteries.sort(key=lambda battery: (battery.get("name") or "").casefold())
+
+    class_groups = [{"id": None, "title": "Unclassified", "batteries": unclassified_batteries}]
+    for battery_class in battery_classes:
+        class_groups.append(
+            {
+                "id": battery_class["id"],
+                "title": battery_class["short_name"],
+                "batteries": batteries_by_class_id.get(battery_class["id"], []),
+            }
+        )
+
+    return render_template(
+        "classes.html",
+        class_groups=class_groups,
+        battery_classes=battery_classes,
+        battery_count=len(batteries),
+        unclassified_count=len(unclassified_batteries),
+    )
+
+
+@admin_blueprint.post("/classes/assign")
+@login_required
+def assign_class():
+    battery_id = request.form.get("battery_id")
+    # An empty value means "Unclassified".
+    battery_class_id = request.form.get("battery_class_id") or None
+    if not battery_id:
+        flash("battery_id required", "error")
+        return redirect(url_for("admin.classes"))
+
+    admin = get_supabase_admin()
+
+    class_name = "Unclassified"
+    if battery_class_id is not None:
+        matching_classes = (
+            admin.table("battery_classes")
+            .select("short_name")
+            .eq("id", battery_class_id)
+            .execute()
+            .data
+        ) or []
+        if not matching_classes:
+            flash("Battery class not found", "error")
+            return redirect(url_for("admin.classes"))
+        class_name = matching_classes[0]["short_name"]
+
+    try:
+        updated = (
+            admin.table("batteries")
+            .update({"battery_class_id": battery_class_id})
+            .eq("id", battery_id)
+            .execute()
+            .data
+        )
+    except Exception as error:  # noqa: BLE001
+        flash("Failed to update battery class: {}".format(error), "error")
+        return redirect(url_for("admin.classes"))
+
+    if not updated:
+        flash("Battery not found", "error")
+        return redirect(url_for("admin.classes"))
+
+    flash('Moved "{}" to {}'.format(updated[0]["name"], class_name), "success")
+    return redirect(url_for("admin.classes", _anchor="battery-{}".format(battery_id)))

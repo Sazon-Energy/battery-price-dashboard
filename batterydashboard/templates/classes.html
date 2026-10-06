@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Battery Classes{% endblock %}
+
+{% block content %}
+  <div class="admin-header">
+    <h1>Battery Classes</h1>
+    <p class="muted">
+      {{ battery_count }} {{ "battery" if battery_count == 1 else "batteries" }} ·
+      {{ unclassified_count }} unclassified
+    </p>
+  </div>
+
+  {% for group in class_groups %}
+    <section class="section class-group">
+      <h2>
+        {{ group.title }}
+        <span class="class-group-count">{{ group.batteries|length }}</span>
+      </h2>
+
+      {% if group.batteries|length == 0 %}
+        <div class="empty-box">No batteries in this class</div>
+      {% else %}
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Supplier</th>
+                <th class="class-editor-column">Class</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for battery in group.batteries %}
+                <tr id="battery-{{ battery.id }}" class="class-row">
+                  <td>
+                    <a href="{{ battery.target_url }}" target="_blank" rel="noopener noreferrer">{{ battery.name }}</a>
+                  </td>
+                  <td>{{ battery.supplier }}</td>
+                  <td class="class-editor-column">
+                    <details class="class-editor">
+                      <summary>
+                        <span class="class-current">{{ group.title }}</span>
+                        <span class="class-edit-label">Edit</span>
+                      </summary>
+                      <form method="post" action="{{ url_for('admin.assign_class') }}" class="class-editor-form">
+                        <input type="hidden" name="battery_id" value="{{ battery.id }}" />
+                        <label class="visually-hidden" for="class-select-{{ battery.id }}">Class for {{ battery.name }}</label>
+                        <select id="class-select-{{ battery.id }}" name="battery_class_id">
+                          <option value="" {{ "selected" if group.id is none else "" }}>Unclassified</option>
+                          {% for battery_class in battery_classes %}
+                            <option value="{{ battery_class.id }}" {{ "selected" if battery_class.id == group.id else "" }}>
+                              {{ battery_class.short_name }}
+                            </option>
+                          {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-save">Save</button>
+                      </form>
+                    </details>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    </section>
+  {% endfor %}
+{% endblock %}

@@ -51,16 +51,59 @@
                 <a href="{{ battery.target_url }}" target="_blank" rel="noopener noreferrer">{{ battery.name }}</a>
               </td>
               <td>{{ battery.supplier }}</td>
-              <td class="num price">{% if battery.current_price %}${{ battery.current_price }}{% else %}No price{% endif %}</td>
+              {% set price_summary = price_history_summaries.get(battery.id) %}
+              <td class="num price">
+                <span class="tooltip-trigger" tabindex="0">
+                  {% if battery.current_price %}${{ battery.current_price }}{% else %}No price{% endif %}
+                  <span class="tooltip-content" hidden>
+                    <span class="tooltip-title">Price, last {{ recent_price_window_days }} days</span>
+                    {% set sparkline = price_summary.sparkline if price_summary else none %}
+                    {% if sparkline %}
+                      <svg
+                        class="sparkline"
+                        width="{{ sparkline.width }}"
+                        height="{{ sparkline.height }}"
+                        viewBox="0 0 {{ sparkline.width }} {{ sparkline.height }}"
+                        aria-hidden="true"
+                      >
+                        <path class="sparkline-line" d="{{ sparkline.path }}" />
+                        <circle class="sparkline-end" cx="{{ sparkline.end_x }}" cy="{{ sparkline.end_y }}" r="3" />
+                      </svg>
+                      <span class="tooltip-range">
+                        <span><span class="tooltip-label">Low</span> {{ sparkline.low_price }}</span>
+                        <span><span class="tooltip-label">High</span> {{ sparkline.high_price }}</span>
+                      </span>
+                    {% else %}
+                      <span class="tooltip-empty">No prices recorded in the last {{ recent_price_window_days }} days</span>
+                    {% endif %}
+                  </span>
+                </span>
+              </td>
               <td>{{ battery.battery_classes.short_name if battery.battery_classes else "No class" }}</td>
               <td class="center">
                 <button
                   type="button"
-                  class="btn btn-history"
+                  class="btn btn-history tooltip-trigger"
                   data-battery-id="{{ battery.id }}"
                   data-battery-name="{{ battery.name }}"
                 >
                   View History
+                  <span class="tooltip-content" hidden>
+                    <span class="tooltip-title">History available</span>
+                    {% if price_summary %}
+                      <span class="tooltip-dates">
+                        <span class="tooltip-label">First</span><span class="tooltip-date">{{ price_summary.first_date }}</span>
+                        {% if price_summary.last_date != price_summary.first_date %}
+                          <span class="tooltip-label">Latest</span><span class="tooltip-date">{{ price_summary.last_date }}</span>
+                        {% endif %}
+                      </span>
+                      <span class="tooltip-footnote">
+                        {% if price_summary.last_date != price_summary.first_date %}{{ price_summary.span }} · {% endif %}{{ price_summary.record_count }} price {{ "update" if price_summary.record_count == 1 else "updates" }}
+                      </span>
+                    {% else %}
+                      <span class="tooltip-empty">No price history recorded yet</span>
+                    {% endif %}
+                  </span>
                 </button>
               </td>
             </tr>

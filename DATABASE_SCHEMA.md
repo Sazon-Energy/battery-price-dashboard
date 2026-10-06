@@ -23,14 +23,14 @@ This document describes all tables in the battery price monitoring system. Use t
 | manufacturer_id | uuid | Foreign key to manufacturers(id), nullable - authoritative source of manufacturer identity |
 | target_url | text | Product page URL |
 | current_price | real | Most recent price in USD |
-| battery_class_id | uuid | Foreign key to battery_classes(id), nullable - populated manually via Supabase Studio, not by app code |
+| battery_class_id | uuid | Foreign key to battery_classes(id), nullable - assigned by an admin on the `/classes` page (NULL = unclassified) |
 | created_at | timestamptz | When record was created |
 | updated_at | timestamptz | Last update timestamp |
 
 **Key Points:**
-- `supplier` is a denormalized display copy of `manufacturers.name`, kept so `app/page.js` can read it without a join; `manufacturer_id` is authoritative if they ever diverge
+- `supplier` is a denormalized display copy of `manufacturers.name`, kept so the dashboard (`batterydashboard/routes/dashboard.py`) can read it without a join; `manufacturer_id` is authoritative if they ever diverge
 - `target_url` is used for the product URL, not `url`
-- Foreign key to `battery_classes` for capacity/power specs, but only manually populated (4/26 rows as of 2026-07) - not set by any app code path
+- Foreign key to `battery_classes` for capacity/power specs; set manually by an admin on the `/classes` page (never set automatically by approval or scraping)
 
 **Relationships:**
 - `battery_class_id` → `battery_classes.id`
@@ -89,7 +89,7 @@ This document describes all tables in the battery price monitoring system. Use t
 - `manufacturer_id` IS a foreign key (unlike batteries.supplier which is a denormalized text copy)
 - `normalized_url` must be unique (used for deduplication)
 - All candidates require manual review - there is no auto-approval
-- After approval, `app/api/candidates/approve/route.js` copies data into `batteries` and sets `battery_id` on this row to the new battery's id
+- After approval, the `approve` route in `batterydashboard/routes/admin.py` copies data into `batteries` and sets `battery_id` on this row to the new battery's id
 
 **Relationships:**
 - `manufacturer_id` → `manufacturers.id`
@@ -99,7 +99,7 @@ This document describes all tables in the battery price monitoring system. Use t
 **Workflow:**
 1. Discovery service creates candidates with status='pending'
 2. User reviews and sets status='approved' or 'rejected' via the `/candidates` UI
-3. On approval, the API route inserts into `batteries` and links this candidate to it via `battery_id`
+3. On approval, the `approve` route inserts into `batteries` and links this candidate to it via `battery_id`
 
 ---
 
